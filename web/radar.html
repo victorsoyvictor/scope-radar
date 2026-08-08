@@ -42,8 +42,15 @@
   .badge.live{color:var(--ok);border-color:#1c4c3c;background:#0a1a15}
   .badge.sim{color:var(--warn);border-color:#4c421c;background:#1a160a}
   .badge.off{color:var(--emerg);border-color:#4c1c1c;background:#1a0a0a}
-  .clock{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--ink-dim);
-    letter-spacing:.06em}
+  .hgroup{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .clock{font-family:var(--mono);font-size:13px;color:var(--ink-dim);letter-spacing:.06em}
+  .wx{font-family:var(--mono);font-size:12px;color:var(--ink-dim);letter-spacing:.03em;
+    white-space:nowrap}
+  .wx b{color:var(--ink);font-weight:600}
+  .coffee{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;
+    text-decoration:none;color:var(--accent);border:1px solid var(--line);border-radius:6px;
+    padding:4px 9px;white-space:nowrap;background:#ffffff08}
+  .coffee:hover{border-color:var(--accent);background:#ffffff14}
   /* stage */
   .stage{flex:1;position:relative;min-height:0}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -165,6 +172,18 @@
     font-family:var(--mono);font-size:11px;letter-spacing:.12em;padding:13px 0;
     cursor:pointer;border-top:2px solid transparent}
   nav button.on{color:var(--accent);border-top-color:var(--accent);background:var(--tab-on)}
+  /* footer credit */
+  .foot{flex:none;text-align:center;padding:5px 0 6px;background:var(--chrome);
+    border-top:1px solid var(--line);font-family:var(--mono);font-size:9.5px;
+    letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase}
+  .foot b{font-weight:700;background:linear-gradient(92deg,#ff3ea5,#22d3ee);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    -webkit-text-fill-color:transparent}
+  /* airline row in the detail card */
+  .airline{display:flex;align-items:center;gap:10px;margin:2px 2px 14px}
+  .airline img{height:30px;max-width:120px;object-fit:contain;
+    background:#ffffff10;border-radius:5px;padding:3px 6px}
+  .airline span{font-family:var(--disp);font-size:14px;color:var(--ink-dim)}
 </style>
 </head>
 <body>
@@ -183,7 +202,12 @@
       <span class="logo">SCOPE</span>
     </div>
     <div id="badge" class="badge sim">SIM</div>
-    <div id="clock" class="clock">--:--:--</div>
+    <div class="hgroup">
+      <div id="wx" class="wx" title="Local weather"></div>
+      <a id="coffee" class="coffee" href="#" target="_blank" rel="noopener"
+         title="Invítame a un café ☕">☕ Café</a>
+      <div id="clock" class="clock">--:--:--</div>
+    </div>
   </header>
 
   <div class="stage">
@@ -209,6 +233,10 @@
       <button class="back" id="detailBack">‹ BACK</button>
       <div class="hd"><span class="cs" id="dCs">—</span><span class="reg" id="dReg"></span></div>
       <div class="actype" id="dType"></div>
+      <div class="airline" id="dAirline" style="display:none">
+        <img id="dAirLogo" alt="" referrerpolicy="no-referrer">
+        <span id="dAirName"></span>
+      </div>
       <div class="route" id="dRoute" style="display:none">
         <div class="ap"><div class="code" id="dFrom">—</div><div class="name" id="dFromN"></div></div>
         <div class="arrow">→</div>
@@ -293,6 +321,7 @@
     <button data-tab="set">SETTINGS</button>
     <button data-tab="diag">DIAG</button>
   </nav>
+  <footer class="foot">built by <b>TEAM&nbsp;ROCKET</b> 🚀</footer>
 </div></div>
 
 <script>
@@ -414,6 +443,11 @@ function applyTheme(name){
   try{localStorage.setItem("scope.theme",state.theme);}catch(e){}
 }
 
+// ── config ───────────────────────────────────────────────────────────────────
+// "Buy me a coffee" link shown next to the clock. Set to your revolut.me URL
+// (or "" to hide the button).
+const REVOLUT_URL="https://revolut.me/vsanchezalonso";
+
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
 // Use the same-origin proxy only when we're actually served by it — i.e. on
@@ -485,14 +519,14 @@ function setSrc(s){ state.src=s; state.fails=0; state.blocked=false;
 $("applyCentre").onclick=()=>{
   const la=parseFloat($("inLat").value),lo=parseFloat($("inLon").value);
   if(isFinite(la)&&isFinite(lo)){state.lat=la;state.lon=lo;state.planes.clear();
-    if(state.src==="sim")seedSim();}
+    if(state.src==="sim")seedSim(); fetchWeather(true);}
 };
 $("useLoc").onclick=()=>{
   if(!navigator.geolocation)return;
   navigator.geolocation.getCurrentPosition(p=>{
     state.lat=p.coords.latitude;state.lon=p.coords.longitude;
     $("inLat").value=state.lat.toFixed(4);$("inLon").value=state.lon.toFixed(4);
-    state.planes.clear(); if(state.src==="sim")seedSim();
+    state.planes.clear(); if(state.src==="sim")seedSim(); fetchWeather(true);
   },()=>{});
 };
 
@@ -801,14 +835,28 @@ async function openDetail(p){
   const sq=$("dSqk"); sq.textContent=p.sqk||"—";
   sq.className=EMERG[p.sqk]?"v warn":"v";
   $("dHex").textContent=(p.hex||"").toUpperCase();
-  // route
+  // airline + route
+  setAirline(p);
   const rt=$("dRoute");
   if(p.from){ rt.style.display="flex";
     $("dFrom").textContent=p.from;$("dFromN").textContent=p.fromN||"";
     $("dTo").textContent=p.to;$("dToN").textContent=p.toN||"";
-  } else { rt.style.display="none"; lookupRoute(p); }
+  } else { rt.style.display="none"; }
+  if(state.src!=="sim"&&(!p.from||p.airIata==null)) lookupRoute(p);   // fill route/airline if missing
 }
 $("detailBack").onclick=()=>{state.detail=false;$("detail").classList.remove("on");};
+// airline row (logo from pics.avs.io by IATA; name from adsbdb)
+function setAirline(p){
+  const box=$("dAirline"), img=$("dAirLogo"), nm=$("dAirName");
+  const iata=(p.airIata||"").trim().toUpperCase();
+  if(!p.airName && !iata){ box.style.display="none"; return; }
+  nm.textContent=p.airName||"";
+  if(iata){
+    img.style.display=""; img.onerror=()=>{ img.style.display="none"; };
+    img.src=`https://pics.avs.io/120/40/${encodeURIComponent(iata)}${DPR>1?"@2x":""}.png`;
+  } else img.style.display="none";
+  box.style.display="flex";
+}
 
 // route lookup via adsbdb (graceful)
 async function lookupRoute(p){
@@ -822,8 +870,10 @@ async function lookupRoute(p){
     const j=await res.json();
     const fr=j&&j.response&&j.response.flightroute;
     if(fr&&fr.origin&&fr.destination){
+      const air=fr.airline||null;
       const rec={from:fr.origin.iata_code,fromN:fr.origin.municipality||fr.origin.name,
         to:fr.destination.iata_code,toN:fr.destination.municipality||fr.destination.name,
+        airIata:air?(air.iata||""):"", airName:air?(air.name||""):"",
         exp:Date.now()+7200000};
       state.routes.set(cs,rec); applyRoute(p,rec);
     } else state.routes.set(cs,{exp:Date.now()+1800000});
@@ -831,11 +881,13 @@ async function lookupRoute(p){
 }
 function applyRoute(p,r){
   if(!r.from)return; p.from=r.from;p.fromN=r.fromN;p.to=r.to;p.toN=r.toN;
+  p.airIata=r.airIata||""; p.airName=r.airName||"";
   if(state.sel===p.hex && $("chip").classList.contains("on")) showChip(p);  // add route to chip
   if(state.detail&&state.sel===p.hex){
     const rt=$("dRoute");rt.style.display="flex";
     $("dFrom").textContent=r.from;$("dFromN").textContent=r.fromN||"";
     $("dTo").textContent=r.to;$("dToN").textContent=r.toN||"";
+    setAirline(p);
   }
 }
 function typeName(t){const m={B738:"Boeing 737-800",A320:"Airbus A320",A21N:"Airbus A321neo",
@@ -881,6 +933,42 @@ setInterval(()=>{if(views.diag.classList.contains("on"))renderDiag();
 setInterval(()=>{const d=new Date();
   $("clock").textContent=d.toTimeString().slice(0,8);},1000);
 
+// ── local weather (Open-Meteo, no key, CORS) ─────────────────────────────────
+// WMO weather codes -> a compact emoji + label.
+function wmo(c){
+  if(c===0) return["☀️","Clear"];
+  if(c<=2) return["🌤️","Fair"];
+  if(c===3) return["☁️","Cloudy"];
+  if(c<=48) return["🌫️","Fog"];
+  if(c<=57) return["🌦️","Drizzle"];
+  if(c<=67) return["🌧️","Rain"];
+  if(c<=77) return["🌨️","Snow"];
+  if(c<=82) return["🌦️","Showers"];
+  if(c<=86) return["🌨️","Snow"];
+  return["⛈️","Storm"];
+}
+let _wxAt=0, _wxKey="";
+async function fetchWeather(force){
+  const key=state.lat.toFixed(2)+","+state.lon.toFixed(2);
+  if(!force && key===_wxKey && Date.now()-_wxAt<600000) return;   // 10-min cache per place
+  _wxKey=key;
+  try{
+    const u=`https://api.open-meteo.com/v1/forecast?latitude=${state.lat.toFixed(3)}&longitude=${state.lon.toFixed(3)}&current=temperature_2m,weather_code`;
+    const r=await fetch(u); const j=await r.json();
+    const cur=j&&j.current; if(!cur){ $("wx").textContent=""; return; }
+    const [ic,label]=wmo(cur.weather_code);
+    $("wx").innerHTML=ic+" <b>"+Math.round(cur.temperature_2m)+"°</b>";
+    $("wx").title=label+" · "+Math.round(cur.temperature_2m)+"°C";
+    _wxAt=Date.now();
+  }catch(e){ $("wx").textContent=""; }   // offline / blocked: just hide it
+}
+setInterval(()=>fetchWeather(false),120000);   // re-check; the cache gates real calls
+
+// ── coffee link ──────────────────────────────────────────────────────────────
+(function(){ const a=$("coffee");
+  if(REVOLUT_URL){ a.href=REVOLUT_URL; } else { a.style.display="none"; }
+})();
+
 // ── boot ─────────────────────────────────────────────────────────────────────
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
 const params=new URLSearchParams(location.search);
@@ -901,6 +989,7 @@ let startRange=50; const qRange=parseFloat(params.get("range"));
 if(isFinite(qRange)&&qRange>0) startRange=RANGES.reduce((a,b)=>Math.abs(b-qRange)<Math.abs(a-qRange)?b:a);
 setRange(startRange);
 setSrc((params.get("src")||"").toLowerCase()==="sim"?"sim":"live");
+fetchWeather(true);
 requestAnimationFrame(()=>{resize();requestAnimationFrame(loop);poll();});
 </script>
 </body>

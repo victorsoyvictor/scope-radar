@@ -57,7 +57,10 @@ and falls back to airplanes.live if it's unreachable.
   class (from the ADS-B wake category / type), so an A380 stands out from a
   regional jet at a glance.
 - **Tap the plane or its info card** for the full detail page (type,
-  registration, vertical rate, distance, bearing, squawk, route).
+  registration, vertical rate, distance, bearing, squawk, route, and the
+  **airline logo + name** where known).
+- **Local weather** for the centre point in the header, from
+  [Open-Meteo](https://open-meteo.com) (free, no key).
 - **Range** 5 / 10 / 25 / 50 / 100 / 250 km.
 - **Emergency squawks** 7500, 7600 and 7700 raise a red banner.
 - **Nearest 96** aircraft are kept, matching the memory budget of the ESP32
