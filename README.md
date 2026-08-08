@@ -98,6 +98,27 @@ type coordinates, or press **USE MY LOCATION**. `PORT` sets the proxy port:
 PORT=9000 python3 proxy/serve.py
 ```
 
+### URL parameters
+
+A single bookmark can fully define a display — handy for a wall screen with no
+keyboard. All are optional and combine with `&`:
+
+| Parameter | Values | Meaning |
+|-----------|--------|---------|
+| `skin`    | `night` · `phosphor` · `amber` · `day` · `synth` | colour theme |
+| `cycle`   | seconds (e.g. `10`; `0` = off) | auto-cycle through aircraft |
+| `lat`     | −90…90    | centre latitude |
+| `lon`     | −180…180  | centre longitude |
+| `range`   | km (snaps to 5/10/25/50/100/250) | initial range |
+| `src`     | `live` · `sim` | data source |
+
+A URL value overrides the remembered setting and is then saved. Example — a
+London-Heathrow wall in the neon skin, cycling every 10 s:
+
+```
+?lat=51.47&lon=-0.4551&range=25&skin=synth&cycle=10
+```
+
 ## Data sources and terms
 
 - Aircraft positions: [adsb.fi](https://adsb.fi) — free, no key, **personal and

@@ -892,7 +892,15 @@ let autoMs=0; try{autoMs=+(localStorage.getItem("scope.autoMs")||0)||0;}catch(e)
 const urlCycle=params.get("cycle");
 if(urlCycle!=null){ const s=parseFloat(urlCycle); autoMs=(s>0?Math.round(s*1000):0); }
 setAuto(autoMs);
-setRange(50); setSrc("live");
+// ?lat= &lon= centre the scope; ?range= km (snapped to the nearest step); ?src=live|sim
+const qLat=parseFloat(params.get("lat")), qLon=parseFloat(params.get("lon"));
+if(isFinite(qLat)&&qLat>=-90&&qLat<=90) state.lat=qLat;
+if(isFinite(qLon)&&qLon>=-180&&qLon<=180) state.lon=qLon;
+$("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
+let startRange=50; const qRange=parseFloat(params.get("range"));
+if(isFinite(qRange)&&qRange>0) startRange=RANGES.reduce((a,b)=>Math.abs(b-qRange)<Math.abs(a-qRange)?b:a);
+setRange(startRange);
+setSrc((params.get("src")||"").toLowerCase()==="sim"?"sim":"live");
 requestAnimationFrame(()=>{resize();requestAnimationFrame(loop);poll();});
 </script>
 </body>
