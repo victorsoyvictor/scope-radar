@@ -12,20 +12,35 @@ to build the physical version.
 
 ## Run it
 
+The quickest way — just open the page. No server, no dependencies:
+
+```bash
+open web/radar.html      # or double-click it
+```
+
+Opened directly, the page pulls live traffic from
+[airplanes.live](https://airplanes.live), which sends CORS headers so the browser
+lets it through.
+
+Or run the bundled proxy to use [adsb.fi](https://adsb.fi) instead, with shared
+rate-limiting and caching across tabs:
+
 ```bash
 python3 proxy/serve.py
 # then open http://localhost:8787
 ```
 
-No dependencies. Python 3.9 or newer.
-
-You can also open `web/radar.html` directly, but the browser will almost
-certainly block the data feeds (see *Why the proxy exists* below) and the page
-will fall back to simulated traffic.
+No dependencies. Python 3.9 or newer. Served this way the page prefers the proxy
+and falls back to airplanes.live if it's unreachable.
 
 ## What it does
 
-- **Live traffic** from [adsb.fi](https://adsb.fi), polled every 5 seconds.
+- **Map underlay** — a [CARTO](https://carto.com/attributions) dark basemap
+  (OpenStreetMap data) is drawn behind the scope and aircraft sit on their true
+  geographic positions. Free, no API key, and it sends CORS headers so it loads
+  straight from the browser.
+- **Live traffic** from [airplanes.live](https://airplanes.live) (or [adsb.fi](https://adsb.fi)
+  through the proxy), polled every 5 seconds.
 - **Dead reckoning** between polls. Each aircraft is projected along its last
   reported track at its last reported ground speed, so motion stays smooth on a
   slow poll. The projection is capped at 20 seconds — an aircraft that stops
@@ -34,6 +49,9 @@ will fall back to simulated traffic.
   registration, type, vertical rate, distance, bearing, squawk and route.
 - **Routes** from [adsbdb](https://api.adsbdb.com), looked up only when you open
   a detail card, and cached for two hours.
+- **Skins** — Night, Phosphor (green CRT), Amber, and Day, each swapping the
+  basemap, scope colours and UI together. Pick one under **SETTINGS**; the choice
+  is remembered, and `?skin=amber` in the URL presets it.
 - **Range** 5 / 10 / 25 / 50 / 100 / 250 km.
 - **Emergency squawks** 7500, 7600 and 7700 raise a red banner.
 - **Nearest 96** aircraft are kept, matching the memory budget of the ESP32
@@ -44,9 +62,10 @@ will fall back to simulated traffic.
 
 ## Why the proxy exists
 
-adsb.fi and adsbdb don't send `Access-Control-Allow-Origin` headers, so a browser
-will fetch their responses and then refuse to let the page read them. Serving the
-page and the data from one origin removes the problem.
+It's optional now — airplanes.live sends `Access-Control-Allow-Origin`, so the
+page reads it straight from the browser. adsb.fi does **not** send that header, so
+a browser fetches its response and then refuses to let the page read it; the proxy
+puts the page and adsb.fi on one origin to get around that.
 
 `proxy/serve.py` also does two things worth having on their own:
 

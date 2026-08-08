@@ -9,28 +9,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#060a10; --panel:#0b121b; --panel2:#0e1826;
+    --bg:#060a10; --bg0:#03060a; --chrome:#070d15; --line:#12202c;
+    --panel:#0b121b; --panel2:#0e1826;
     --ring:#123044; --ring-strong:#1c4d63;
     --ink:#d9e8f0; --ink-dim:#6f93a8; --ink-faint:#3f5b6d;
     --ac:#cfe1ec; --vec:#38bdf8; --sel:#ffb020; --emerg:#ff3b3b;
-    --accent:#39d0ff; --ok:#3ad19a; --warn:#ffcf5c;
+    --accent:#39d0ff; --tab-on:#0a1622; --ok:#3ad19a; --warn:#ffcf5c;
     --mono:'JetBrains Mono',ui-monospace,monospace;
     --disp:'Rajdhani',system-ui,sans-serif;
   }
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:#03060a;color:var(--ink);
+  html,body{margin:0;height:100%;background:var(--bg0);color:var(--ink);
     font-family:var(--disp);-webkit-font-smoothing:antialiased;overflow:hidden}
-  #app{height:100%;display:flex;align-items:center;justify-content:center;padding:14px}
+  #app{height:100%;display:flex;align-items:stretch;justify-content:center}
   .device{
-    width:100%;max-width:520px;height:100%;max-height:860px;
-    background:linear-gradient(160deg,#0a121c,#05090f);
-    border:1px solid #16222f;border-radius:18px;overflow:hidden;
+    width:100%;height:100%;background:var(--bg0);
+    overflow:hidden;
     display:flex;flex-direction:column;position:relative;
-    box-shadow:0 30px 80px -30px #000,inset 0 1px 0 #1b2b3a;
   }
   /* header */
   header{display:flex;align-items:center;gap:10px;padding:11px 15px;
-    border-bottom:1px solid #12202c;background:#070d15}
+    border-bottom:1px solid var(--line);background:var(--chrome)}
   .logo{font-family:var(--disp);font-weight:700;font-size:19px;letter-spacing:.14em;
     color:var(--ink)}
   .logo b{color:var(--accent)}
@@ -44,9 +43,15 @@
   /* stage */
   .stage{flex:1;position:relative;min-height:0}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  .view{position:absolute;inset:0;overflow-y:auto;padding:16px 16px 20px;
-    background:linear-gradient(180deg,#070d15,#060a10);display:none}
-  .view.on{display:block}
+  .view{position:absolute;inset:0;overflow-y:auto;padding:20px 16px 24px;
+    background:linear-gradient(180deg,var(--chrome),var(--bg));display:none}
+  .view.on{display:flex;flex-direction:column;align-items:center}
+  .view>*{width:100%;max-width:680px}
+  /* map attribution */
+  .attrib{position:absolute;right:8px;bottom:6px;z-index:3;pointer-events:none;
+    font-family:var(--mono);font-size:9px;color:#5f7c8e;letter-spacing:.02em;
+    background:#03060acc;padding:2px 6px;border-radius:4px}
+  .attrib a{color:#7ea6bd}
   .view h2{font-size:15px;letter-spacing:.14em;text-transform:uppercase;
     color:var(--ink-dim);margin:2px 0 14px;font-weight:600}
   /* radar overlays */
@@ -149,11 +154,11 @@
   .diag .ln b{color:var(--ink);font-weight:500}
   .diag .ln b.ok{color:var(--ok)} .diag .ln b.bad{color:var(--emerg)}
   /* tab bar */
-  nav{display:flex;border-top:1px solid #12202c;background:#070d15}
+  nav{display:flex;border-top:1px solid var(--line);background:var(--chrome)}
   nav button{flex:1;background:none;border:none;color:var(--ink-faint);
     font-family:var(--mono);font-size:11px;letter-spacing:.12em;padding:13px 0;
     cursor:pointer;border-top:2px solid transparent}
-  nav button.on{color:var(--accent);border-top-color:var(--accent);background:#0a1622}
+  nav button.on{color:var(--accent);border-top-color:var(--accent);background:var(--tab-on)}
 </style>
 </head>
 <body>
@@ -175,6 +180,7 @@
     </div>
     <div id="emerg" class="emerg-banner"></div>
     <div id="warn" class="warnbar"></div>
+    <div class="attrib">© <a href="https://openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></div>
     <div id="chip" class="chip">
       <div class="cs" id="chipCs">—</div>
       <div class="sub" id="chipSub"></div>
@@ -214,9 +220,11 @@
     <!-- SETTINGS -->
     <div id="setView" class="view">
       <h2>Settings</h2>
+      <div class="field"><label>Skin</label>
+        <div class="seg" id="skinSeg"></div></div>
       <div class="field"><label>Data source</label>
         <div class="seg" id="srcSeg">
-          <button data-src="live">Live · adsb.fi</button>
+          <button data-src="live">Live traffic</button>
           <button data-src="sim">Simulated</button>
         </div></div>
       <div class="field"><label>Centre latitude</label><input id="inLat" inputmode="decimal"></div>
@@ -225,10 +233,11 @@
       <button class="btn" id="useLoc" style="margin-top:8px;background:#0d1a24;color:var(--ink-dim);border-color:#16283a">USE MY LOCATION</button>
       <div class="field" style="margin-top:18px"><label>Default range (km)</label>
         <div class="seg" id="rangeSeg"></div></div>
-      <div class="note">Live data from <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a>,
-        a community ADS-B network — personal, non-commercial use, 1 request/second.
-        Routes from adsbdb. Browsers may block the live feed (CORS); if so the scope
-        falls back to simulation and DIAG shows the error.</div>
+      <div class="note">Live data from community ADS-B networks —
+        <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a>
+        directly, or <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a>
+        via the bundled proxy. Personal, non-commercial use. Routes from adsbdb.
+        If no feed is reachable the scope falls back to simulation and DIAG shows the error.</div>
     </div>
 
     <!-- DIAG -->
@@ -279,15 +288,111 @@ const dest=(lat,lon,bDeg,dKm)=>{const d=dKm/R_EARTH,b=bDeg*D2R,
   λ2=λ1+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(φ1),Math.cos(d)-Math.sin(φ1)*Math.sin(φ2));
   return {lat:φ2*R2D,lon:((λ2*R2D+540)%360)-180};};
 
+// ── web-mercator + map tiles ─────────────────────────────────────────────────
+// The scope is drawn over a slippy-map underlay (CARTO dark basemap — free, no
+// key, and it sends CORS headers). Everything is projected the same way so the
+// aircraft sit on their true geographic positions, not just a bearing/range plot.
+const TILE=256, MPP0=156543.03392;          // metres/pixel at the equator, zoom 0
+function mercXY(lat,lon,z){                  // geo -> world-pixel at integer zoom z
+  const s=2**z*TILE, sy=Math.min(0.9999,Math.max(-0.9999,Math.sin(lat*D2R)));
+  return {x:(lon+180)/360*s, y:(0.5-Math.log((1+sy)/(1-sy))/(4*Math.PI))*s};
+}
+const tileCache=new Map();                   // "style/z/x/y" -> Image
+const tileURL=(style,z,x,y,hi)=>`https://${"abcd"[(x+y)&3]}.basemaps.cartocdn.com/${style}/${z}/${x}/${y}${hi?"@2x":""}.png`;
+function getTile(style,z,x,y,hi){
+  const k=style+"/"+z+"/"+x+"/"+y; let img=tileCache.get(k);
+  if(img) return (img.complete&&img.naturalWidth>0)?img:null;
+  img=new Image(); img.src=tileURL(style,z,x,y,hi); tileCache.set(k,img);
+  if(tileCache.size>500){const f=tileCache.keys().next().value;tileCache.delete(f);}
+  return null;                               // not ready yet; a later frame draws it
+}
+// Pick the zoom that makes the current range fill the scope radius, then project.
+function computeProj(){
+  const mppTarget=state.range*1000/Rpx;      // metres per screen pixel we want
+  const zf=Math.min(18,Math.max(3,Math.log2(MPP0*Math.cos(state.lat*D2R)/mppTarget)));
+  const Z=Math.floor(zf), scale=2**(zf-Z);   // integer tiles + sub-zoom scale
+  return {Z,scale,c:mercXY(state.lat,state.lon,Z)};
+}
+function toScreen(lat,lon,proj){
+  const p=mercXY(lat,lon,proj.Z);
+  return {x:cx+(p.x-proj.c.x)*proj.scale, y:cy+(p.y-proj.c.y)*proj.scale};
+}
+function drawTiles(proj){
+  const {Z,scale,c}=proj, n=2**Z, sz=TILE*scale, hi=DPR>1, style=TH.map;
+  const tx0=Math.floor((c.x-cx/scale)/TILE), tx1=Math.floor((c.x+(W-cx)/scale)/TILE);
+  const ty0=Math.floor((c.y-cy/scale)/TILE), ty1=Math.floor((c.y+(H-cy)/scale)/TILE);
+  for(let tx=tx0;tx<=tx1;tx++) for(let ty=ty0;ty<=ty1;ty++){
+    if(ty<0||ty>=n) continue;
+    const img=getTile(style,Z,((tx%n)+n)%n,ty,hi);
+    if(img) ctx.drawImage(img, cx+(tx*TILE-c.x)*scale, cy+(ty*TILE-c.y)*scale, sz+0.5, sz+0.5);
+  }
+}
+
+// ── skins ────────────────────────────────────────────────────────────────────
+// Each skin swaps the basemap, the canvas colours, and the CSS chrome together.
+// canvas colours are read from TH at draw time; css vars restyle header/panels/nav.
+const THEMES={
+  night:{ label:"Night", map:"dark_all",
+    canvas:{ bg:"#05080d", wash:"rgba(4,8,14,.34)", ring:"rgba(20,48,66,.8)",
+      ringStrong:"rgba(28,77,99,.95)", ringLabel:"#4d7488", grid:"rgba(15,37,49,.85)",
+      cardinal:"#6f93a8", accent:"#39d0ff", accentRGB:"57,208,255", sweepA:".13",
+      vectorRGB:"56,189,248", trailRGB:"125,175,200", plane:"#e3eff7", sel:"#ffb020",
+      emerg:"#ff3b3b", tagText:"#a9cbdf", tagDim:"#83a9bf", halo:"rgba(0,0,0,.7)" },
+    css:{ "--bg":"#060a10","--bg0":"#03060a","--chrome":"#070d15","--line":"#12202c",
+      "--ink":"#d9e8f0","--ink-dim":"#6f93a8","--ink-faint":"#3f5b6d","--accent":"#39d0ff",
+      "--tab-on":"#0a1622" } },
+  phosphor:{ label:"Phosphor", map:"dark_all",   // tint comes from the wash, not a black map
+    canvas:{ bg:"#02120a", wash:"rgba(3,26,15,.5)", ring:"rgba(26,74,48,.8)",
+      ringStrong:"rgba(46,120,74,.95)", ringLabel:"#3f9c66", grid:"rgba(18,56,36,.85)",
+      cardinal:"#4fb37a", accent:"#43ff8f", accentRGB:"67,255,143", sweepA:".16",
+      vectorRGB:"67,230,130", trailRGB:"90,210,140", plane:"#8dffb0", sel:"#eaff5c",
+      emerg:"#ff5b5b", tagText:"#8dffb0", tagDim:"#4fb37a", halo:"rgba(0,0,0,.72)" },
+    css:{ "--bg":"#04140c","--bg0":"#010a06","--chrome":"#03130b","--line":"#123024",
+      "--ink":"#d6ffe6","--ink-dim":"#5fb383","--ink-faint":"#2f6647","--accent":"#43ff8f",
+      "--tab-on":"#08201380" } },
+  amber:{ label:"Amber", map:"dark_all",
+    canvas:{ bg:"#140c02", wash:"rgba(28,17,2,.5)", ring:"rgba(84,58,20,.8)",
+      ringStrong:"rgba(140,96,30,.95)", ringLabel:"#a9793a", grid:"rgba(64,44,16,.85)",
+      cardinal:"#c08a3a", accent:"#ffb454", accentRGB:"255,180,84", sweepA:".15",
+      vectorRGB:"255,170,70", trailRGB:"210,160,90", plane:"#ffd79a", sel:"#7dd3fc",
+      emerg:"#ff5b5b", tagText:"#ffd79a", tagDim:"#c08a3a", halo:"rgba(0,0,0,.72)" },
+    css:{ "--bg":"#140c04","--bg0":"#0a0602","--chrome":"#130c04","--line":"#3a2a10",
+      "--ink":"#ffe9c9","--ink-dim":"#c08a3a","--ink-faint":"#6b4a1c","--accent":"#ffb454",
+      "--tab-on":"#22160880" } },
+  day:{ label:"Day", map:"rastertiles/voyager",   // colourful map under the dark UI shell
+    canvas:{ bg:"#dfe7ec", wash:"rgba(18,40,55,.04)", ring:"rgba(30,75,105,.5)",
+      ringStrong:"rgba(15,65,95,.75)", ringLabel:"#215a76", grid:"rgba(30,65,90,.45)",
+      cardinal:"#2a5871", accent:"#0090d4", accentRGB:"0,144,212", sweepA:".14",
+      vectorRGB:"0,120,190", trailRGB:"30,80,115", plane:"#0a2532", sel:"#c2410c",
+      emerg:"#c81e1e", tagText:"#0f3244", tagDim:"#325a6f", halo:"rgba(255,255,255,.82)" },
+    css:{ "--bg":"#060a10","--bg0":"#03060a","--chrome":"#070d15","--line":"#12202c",
+      "--ink":"#d9e8f0","--ink-dim":"#6f93a8","--ink-faint":"#3f5b6d","--accent":"#28b0f0",
+      "--tab-on":"#0a1622" } },
+};
+let TH={...THEMES.night.canvas, map:THEMES.night.map};
+function applyTheme(name){
+  const th=THEMES[name]||THEMES.night;
+  state.theme=name in THEMES?name:"night";
+  TH={...th.canvas, map:th.map};   // canvas colours + the basemap style in one object
+  const rs=document.documentElement.style;
+  for(const k in th.css) rs.setProperty(k,th.css[k]);
+  document.querySelectorAll("#skinSeg button").forEach(b=>
+    b.classList.toggle("sel",b.dataset.skin===state.theme));
+  try{localStorage.setItem("scope.theme",state.theme);}catch(e){}
+}
+
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
-// When the page is served by proxy/serve.py the feeds are same-origin, so the
-// browser will actually let us read them. Opened as a bare file:// or from any
-// other host, we try the public endpoints directly and fall back to simulation.
-const viaProxy=location.protocol.startsWith("http");
+// Use the same-origin proxy only when we're actually served by it — i.e. on
+// localhost or a private-LAN address. On a public host (e.g. GitHub Pages) there
+// is no proxy, so we skip it and fetch airplanes.live directly (it sends CORS).
+const _h=location.hostname;
+const _localish=_h==="localhost"||_h==="127.0.0.1"||_h==="[::1]"||
+  /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(_h);
+const viaProxy=location.protocol.startsWith("http")&&_localish;
 const EMERG={ "7500":"7500 · UNLAWFUL INTERFERENCE","7600":"7600 · RADIO FAILURE","7700":"7700 · GENERAL EMERGENCY" };
 const state={
-  src:"live", lat:-37.6733, lon:144.8433, range:50,     // Melbourne Airport
+  src:"live", theme:"night", lat:-37.6733, lon:144.8433, range:50,     // Melbourne Airport
   planes:new Map(),          // hex -> plane
   routes:new Map(),          // callsign -> {from,to,fromN,toN,exp}
   sel:null, detail:false,
@@ -330,6 +435,9 @@ $("rdn").onclick=()=>{const i=RANGES.indexOf(state.range);if(i>0)setRange(RANGES
 const rangeSeg=$("rangeSeg");
 RANGES.forEach(km=>{const b=document.createElement("button");b.textContent=km;
   b.dataset.km=km;b.onclick=()=>setRange(km);rangeSeg.appendChild(b);});
+const skinSeg=$("skinSeg");
+Object.keys(THEMES).forEach(k=>{const b=document.createElement("button");
+  b.textContent=THEMES[k].label;b.dataset.skin=k;b.onclick=()=>applyTheme(k);skinSeg.appendChild(b);});
 document.querySelectorAll("#srcSeg button").forEach(b=>b.onclick=()=>{
   setSrc(b.dataset.src);});
 function setSrc(s){ state.src=s; state.fails=0; state.blocked=false;
@@ -353,32 +461,44 @@ $("useLoc").onclick=()=>{
   },()=>{});
 };
 
-// ── live fetch (adsb.fi v3) ──────────────────────────────────────────────────
+// ── live fetch (proxy → airplanes.live) ──────────────────────────────────────
 async function poll(){
   if(state.src!=="live"){ setTimeout(poll,5000); return; }
   const nm=Math.min(250,Math.ceil(state.range/KM_PER_NM*1.15));
-  const url=viaProxy
-    ? `/api/ac?lat=${state.lat.toFixed(4)}&lon=${state.lon.toFixed(4)}&nm=${nm}`
-    : `https://opendata.adsb.fi/api/v3/lat/${state.lat.toFixed(4)}/lon/${state.lon.toFixed(4)}/dist/${nm}`;
+  const lat=state.lat.toFixed(4), lon=state.lon.toFixed(4);
+  // Feeds are tried in order. The bundled proxy (when it's serving us) shares one
+  // rate-limited adsb.fi call across all tabs. api.airplanes.live is a public feed
+  // that DOES send CORS headers and uses the same schema, so it works straight from
+  // the browser — opening radar.html directly still shows real traffic, no backend.
+  // adsb.fi is intentionally not fetched directly: it sends no CORS header, so a
+  // browser can never read it cross-origin and it would only ever fall back to sim.
+  const urls=[];
+  if(viaProxy) urls.push(`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`);
+  urls.push(`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`);
   const t0=performance.now();
-  try{
-    const res=await fetch(url,{headers:{Accept:"application/json"}});
-    const txt=await res.text();
-    state.latency=Math.round(performance.now()-t0);
-    state.payload=txt.length;
-    const data=JSON.parse(txt);
-    ingest(data.ac||[]);
-    state.fails=0; state.lastFetch="OK"; state.blocked=false;
-    $("badge").className="badge live"; $("badge").textContent="LIVE";
-  }catch(e){
-    state.fails++; state.lastFetch="ERR: "+(e.message||e).slice(0,40);
-    if(state.fails>=2 && !state.blocked){
-      state.blocked=true;                 // CORS / offline -> fall back
-      $("badge").className="badge off"; $("badge").textContent="NO FEED";
-      seedSim(); state.src="sim";
-      document.querySelectorAll("#srcSeg button").forEach(x=>
-        x.classList.toggle("sel",x.dataset.src==="sim"));
-    }
+  let lastErr=null;
+  for(const url of urls){
+    try{
+      const res=await fetch(url,{headers:{Accept:"application/json"}});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const txt=await res.text();
+      state.latency=Math.round(performance.now()-t0);
+      state.payload=txt.length;
+      const data=JSON.parse(txt);
+      ingest(data.ac||[]);
+      state.fails=0; state.lastFetch="OK"; state.blocked=false;
+      $("badge").className="badge live"; $("badge").textContent="LIVE";
+      updateWarn(); setTimeout(poll,5000); return;
+    }catch(e){ lastErr=e; }        // try the next candidate before giving up
+  }
+  // every candidate failed (offline, or both feeds unreachable)
+  state.fails++; state.lastFetch="ERR: "+String((lastErr&&lastErr.message)||lastErr||"fetch").slice(0,40);
+  if(state.fails>=2 && !state.blocked){
+    state.blocked=true;                 // offline -> fall back to simulation
+    $("badge").className="badge off"; $("badge").textContent="NO FEED";
+    seedSim(); state.src="sim";
+    document.querySelectorAll("#srcSeg button").forEach(x=>
+      x.classList.toggle("sel",x.dataset.src==="sim"));
   }
   updateWarn();
   setTimeout(poll,5000);
@@ -463,85 +583,85 @@ function simStep(){
 // ── render ───────────────────────────────────────────────────────────────────
 function drawScope(t){
   ctx.clearRect(0,0,W,H);
-  // backdrop
-  ctx.fillStyle="#060a10";ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=TH.bg;ctx.fillRect(0,0,W,H);
+  // map underlay, then a wash to keep the scope legible over it
+  const proj=computeProj();
+  drawTiles(proj);
+  ctx.fillStyle=TH.wash;ctx.fillRect(0,0,W,H);
   // range rings
   ctx.lineWidth=1;
   for(let i=1;i<=4;i++){
     ctx.beginPath();ctx.arc(cx,cy,Rpx*i/4,0,7);
-    ctx.strokeStyle=i===4?"#1c4d63":"#122c3c";ctx.stroke();
-    ctx.fillStyle="#2c4a5b";ctx.font="10px 'JetBrains Mono'";
+    ctx.strokeStyle=i===4?TH.ringStrong:TH.ring;ctx.stroke();
+    ctx.fillStyle=TH.ringLabel;ctx.font="10px 'JetBrains Mono'";
     ctx.fillText(Math.round(state.range*i/4)+"km",cx+4,cy-Rpx*i/4+13);
   }
   // cross + cardinals
-  ctx.strokeStyle="#0f2531";ctx.beginPath();
+  ctx.strokeStyle=TH.grid;ctx.beginPath();
   ctx.moveTo(cx-Rpx,cy);ctx.lineTo(cx+Rpx,cy);ctx.moveTo(cx,cy-Rpx);ctx.lineTo(cx,cy+Rpx);ctx.stroke();
-  ctx.fillStyle="#3f5b6d";ctx.font="11px 'JetBrains Mono'";ctx.textAlign="center";
+  ctx.fillStyle=TH.cardinal;ctx.font="11px 'JetBrains Mono'";ctx.textAlign="center";
   ctx.fillText("N",cx,cy-Rpx-4);ctx.fillText("S",cx,cy+Rpx+13);
   ctx.fillText("E",cx+Rpx+9,cy+4);ctx.fillText("W",cx-Rpx-9,cy+4);
   ctx.textAlign="left";
   // sweep
   const sw=(t/4000)*Math.PI*2%(Math.PI*2);
-  const g=ctx.createConicGradient? null:null;
   ctx.save();ctx.translate(cx,cy);ctx.rotate(sw);
   const grad=ctx.createLinearGradient(0,0,Rpx,0);
-  grad.addColorStop(0,"rgba(57,208,255,0)");grad.addColorStop(1,"rgba(57,208,255,.16)");
+  grad.addColorStop(0,"rgba("+TH.accentRGB+",0)");grad.addColorStop(1,"rgba("+TH.accentRGB+","+TH.sweepA+")");
   ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,Rpx,-0.32,0);ctx.closePath();
   ctx.fillStyle=grad;ctx.fill();
-  ctx.strokeStyle="rgba(57,208,255,.5)";ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Rpx,0);ctx.stroke();
+  ctx.strokeStyle="rgba("+TH.accentRGB+",.42)";ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(Rpx,0);ctx.stroke();
   ctx.restore();
   // centre marker
-  ctx.fillStyle="#39d0ff";ctx.beginPath();ctx.arc(cx,cy,2.5,0,7);ctx.fill();
+  ctx.fillStyle=TH.accent;ctx.beginPath();ctx.arc(cx,cy,3,0,7);ctx.fill();
+  ctx.strokeStyle="rgba("+TH.accentRGB+",.5)";ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,6,0,7);ctx.stroke();
 
   const now=Date.now(); let emergMsg=null;
   for(const p of state.planes.values()){
     const dtp=Math.min((now-p.recvAt)/1000,20);
     const step=p.onGround?0:p.gs*KM_PER_NM/3600*dtp;
     const pos=step>0?dest(p.recvLat,p.recvLon,p.track,step):{lat:p.recvLat,lon:p.recvLon};
-    const dkm=hav(state.lat,state.lon,pos.lat,pos.lon);
-    const bb=brng(state.lat,state.lon,pos.lat,pos.lon);
-    const rr=dkm/state.range*Rpx;
-    if(rr>Rpx*1.02){p._x=null;continue;}
-    const x=cx+rr*Math.sin(bb*D2R), y=cy-rr*Math.cos(bb*D2R);
+    const s=toScreen(pos.lat,pos.lon,proj);
+    const x=s.x, y=s.y;
+    if(x<-60||x>W+60||y<-60||y>H+60){p._x=null;continue;}
     p._x=x;p._y=y;
     const isSel=state.sel===p.hex;
     const isEm=EMERG[p.sqk];
     if(isEm) emergMsg=EMERG[p.sqk];
-    // trail
+    // trail (projected polyline)
     if(p.trail.length>1){
-      for(let i=1;i<p.trail.length;i++){
-        const a=p.trail[i-1],b=p.trail[i];
-        const da=hav(state.lat,state.lon,a.lat,a.lon)/state.range*Rpx;
-        const ba=brng(state.lat,state.lon,a.lat,a.lon);
-        const db=hav(state.lat,state.lon,b.lat,b.lon)/state.range*Rpx;
-        const bbb=brng(state.lat,state.lon,b.lat,b.lon);
-        ctx.strokeStyle="rgba(120,170,195,"+(i/p.trail.length*0.4)+")";
-        ctx.beginPath();
-        ctx.moveTo(cx+da*Math.sin(ba*D2R),cy-da*Math.cos(ba*D2R));
-        ctx.lineTo(cx+db*Math.sin(bbb*D2R),cy-db*Math.cos(bbb*D2R));ctx.stroke();
+      ctx.beginPath();
+      for(let i=0;i<p.trail.length;i++){
+        const q=toScreen(p.trail[i].lat,p.trail[i].lon,proj);
+        i?ctx.lineTo(q.x,q.y):ctx.moveTo(q.x,q.y);
       }
+      ctx.strokeStyle="rgba("+TH.trailRGB+",.4)";ctx.lineWidth=1.2;ctx.stroke();
     }
-    const col=isEm?"#ff3b3b":isSel?"#ffb020":"#cfe1ec";
+    const col=isEm?TH.emerg:isSel?TH.sel:TH.plane;
     // heading vector
-    const vlen=Math.min(26,6+p.gs/22);
-    ctx.strokeStyle=isEm?"#ff6b6b":isSel?"#ffb020":"rgba(56,189,248,.75)";
+    const vlen=Math.min(30,7+p.gs/20);
+    ctx.strokeStyle=isEm?TH.emerg:isSel?TH.sel:"rgba("+TH.vectorRGB+",.8)";
     ctx.lineWidth=isSel?2:1;
     ctx.beginPath();ctx.moveTo(x,y);
     ctx.lineTo(x+vlen*Math.sin(p.track*D2R),y-vlen*Math.cos(p.track*D2R));ctx.stroke();
-    // symbol (chevron rotated to track)
+    // symbol (chevron rotated to track, halo-outlined so it reads over the map)
     ctx.save();ctx.translate(x,y);ctx.rotate(p.track*D2R);
-    ctx.fillStyle=col;ctx.beginPath();
-    ctx.moveTo(0,-5);ctx.lineTo(4,4);ctx.lineTo(0,1.5);ctx.lineTo(-4,4);ctx.closePath();ctx.fill();
-    if(isEm||isSel){ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,9,0,7);ctx.stroke();}
+    ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(5,5);ctx.lineTo(0,2);ctx.lineTo(-5,5);ctx.closePath();
+    ctx.strokeStyle=TH.halo;ctx.lineWidth=2.5;ctx.stroke();
+    ctx.fillStyle=col;ctx.fill();
+    if(isEm||isSel){ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,10,0,7);ctx.stroke();}
     ctx.restore();
-    // data block (authentic ATC tag)
+    // data block (authentic ATC tag) — drawn with a halo for legibility
     if(isSel||state.range<=50){
       ctx.font="10px 'JetBrains Mono'";
-      ctx.fillStyle=isEm?"#ff8a8a":isSel?"#ffcf7a":"#8fb6cb";
       const fl=p.onGround?"GND":(p.alt!=null?String(Math.round(p.alt/100)).padStart(3,"0"):"---");
+      const line2=fl+"  "+Math.round(p.gs);
+      ctx.fillStyle=TH.halo;
+      ctx.fillText(p.cs,x+10,y-1); ctx.fillText(line2,x+10,y+10);
+      ctx.fillStyle=isEm?TH.emerg:isSel?TH.sel:TH.tagText;
       ctx.fillText(p.cs,x+9,y-2);
-      ctx.fillStyle=isEm?"#ff6b6b":(isSel?"#e0b878":"#5d8196");
-      ctx.fillText(fl+"  "+Math.round(p.gs),x+9,y+9);
+      ctx.fillStyle=isEm?TH.emerg:(isSel?TH.sel:TH.tagDim);
+      ctx.fillText(line2,x+9,y+9);
     }
   }
   // emergency banner
@@ -654,10 +774,10 @@ function renderList(){
   }
 }
 function renderDiag(){
-  $("gMode").textContent=state.blocked?"SIM (feed blocked)":(state.src==="live"?"LIVE · adsb.fi":"SIM");
+  $("gMode").textContent=state.blocked?"SIM (feed offline)":(state.src==="live"?(viaProxy?"LIVE · proxy":"LIVE · airplanes.live"):"SIM");
   $("gMode").className=state.src==="live"&&!state.blocked?"ok":"";
   $("gCentre").textContent=state.lat.toFixed(3)+", "+state.lon.toFixed(3);
-  $("gRange").textContent=state.range+" km";
+  {const pr=computeProj();$("gRange").textContent=state.range+" km · map z"+(pr.Z+Math.log2(pr.scale)).toFixed(1);}
   $("gFetch").textContent=state.lastFetch||"—";
   $("gFetch").className=state.lastFetch==="OK"?"ok":(state.lastFetch?"bad":"");
   $("gLat").textContent=state.latency!=null?state.latency+" ms":"—";
@@ -677,6 +797,9 @@ setInterval(()=>{const d=new Date();
 
 // ── boot ─────────────────────────────────────────────────────────────────────
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
+let savedTheme="night"; try{savedTheme=localStorage.getItem("scope.theme")||"night";}catch(e){}
+const urlSkin=new URLSearchParams(location.search).get("skin");   // ?skin=amber to preset
+applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
 setRange(50); setSrc("live");
 requestAnimationFrame(()=>{resize();requestAnimationFrame(loop);poll();});
 </script>
