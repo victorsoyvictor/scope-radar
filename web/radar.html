@@ -43,7 +43,7 @@
   /* stage */
   .stage{flex:1;position:relative;min-height:0}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
-  .view{position:absolute;inset:0;overflow-y:auto;padding:20px 16px 24px;
+  .view{position:absolute;inset:0;z-index:10;overflow-y:auto;padding:20px 16px 24px;
     background:linear-gradient(180deg,var(--chrome),var(--bg));display:none}
   .view.on{display:flex;flex-direction:column;align-items:center}
   .view>*{width:100%;max-width:680px}
