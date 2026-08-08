@@ -61,6 +61,9 @@ and falls back to airplanes.live if it's unreachable.
   **airline logo + name** where known).
 - **Local weather** for the centre point in the header, from
   [Open-Meteo](https://open-meteo.com) (free, no key).
+- **Ambient music** — an optional speaker button plays a YouTube track (loaded
+  only on tap; browsers block auto-play with sound). Set `MUSIC_ID` / `MUSIC_START`
+  near the top of the script, or `MUSIC_ID=""` to hide it.
 - **Range** 5 / 10 / 25 / 50 / 100 / 250 km.
 - **Emergency squawks** 7500, 7600 and 7700 raise a red banner.
 - **Nearest 96** aircraft are kept, matching the memory budget of the ESP32

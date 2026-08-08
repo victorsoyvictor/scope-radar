@@ -51,6 +51,10 @@
     text-decoration:none;color:var(--accent);border:1px solid var(--line);border-radius:6px;
     padding:4px 9px;white-space:nowrap;background:#ffffff08}
   .coffee:hover{border-color:var(--accent);background:#ffffff14}
+  .sbtn{font-size:14px;line-height:1;cursor:pointer;color:var(--ink);
+    background:#ffffff08;border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+  .sbtn:hover{border-color:var(--accent)}
+  #yt{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
   /* stage */
   .stage{flex:1;position:relative;min-height:0}
   canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
@@ -204,11 +208,13 @@
     <div id="badge" class="badge sim">SIM</div>
     <div class="hgroup">
       <div id="wx" class="wx" title="Local weather"></div>
+      <button id="sound" class="sbtn" title="Ambient music (tap to play/pause)">🔈</button>
       <a id="coffee" class="coffee" href="#" target="_blank" rel="noopener"
          title="Invítame a un café ☕">☕ Café</a>
       <div id="clock" class="clock">--:--:--</div>
     </div>
   </header>
+  <div id="yt" aria-hidden="true"></div>
 
   <div class="stage">
     <canvas id="cv"></canvas>
@@ -447,6 +453,9 @@ function applyTheme(name){
 // "Buy me a coffee" link shown next to the clock. Set to your revolut.me URL
 // (or "" to hide the button).
 const REVOLUT_URL="https://revolut.me/vsanchezalonso";
+// Ambient music: a YouTube video embedded on demand (nothing loads until you tap
+// the speaker). Set MUSIC_ID="" to hide the button. MUSIC_START = start seconds.
+const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
 
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
@@ -967,6 +976,41 @@ setInterval(()=>fetchWeather(false),120000);   // re-check; the cache gates real
 // ── coffee link ──────────────────────────────────────────────────────────────
 (function(){ const a=$("coffee");
   if(REVOLUT_URL){ a.href=REVOLUT_URL; } else { a.style.display="none"; }
+})();
+
+// ── ambient music (YouTube embed, loaded only when you tap the speaker) ───────
+(function(){
+  const btn=$("sound");
+  if(!MUSIC_ID){ btn.style.display="none"; return; }
+  let player=null, st="off";                       // off · loading · playing · paused
+  btn.onclick=()=>{
+    if(st==="off"){ st="loading"; btn.textContent="…"; loadAPI(); return; }
+    if(!player) return;
+    if(st==="playing") player.pauseVideo();
+    else { player.unMute(); player.setVolume(55); player.playVideo(); }
+  };
+  function loadAPI(){
+    if(window.YT&&window.YT.Player) return init();
+    const prev=window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady=()=>{ if(prev)prev(); init(); };
+    const s=document.createElement("script"); s.src="https://www.youtube.com/iframe_api";
+    s.onerror=()=>{ st="off"; btn.textContent="🔈"; };
+    document.head.appendChild(s);
+  }
+  function init(){
+    player=new YT.Player("yt",{videoId:MUSIC_ID,
+      playerVars:{start:MUSIC_START,autoplay:1,controls:0,disablekb:1,loop:1,
+        playlist:MUSIC_ID,playsinline:1,modestbranding:1},
+      events:{
+        onReady:e=>{ e.target.unMute(); e.target.setVolume(55); e.target.playVideo(); },
+        onStateChange:e=>{ const S=YT.PlayerState;
+          if(e.data===S.PLAYING){ st="playing"; btn.textContent="🔊"; }
+          else if(e.data===S.PAUSED){ st="paused"; btn.textContent="🔈"; }
+          else if(e.data===S.ENDED){ e.target.seekTo(MUSIC_START); e.target.playVideo(); }
+        },
+        onError:()=>{ st="off"; btn.textContent="🚫"; btn.title="Track unavailable"; }
+      }});
+  }
 })();
 
 // ── boot ─────────────────────────────────────────────────────────────────────
