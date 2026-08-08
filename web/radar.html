@@ -30,9 +30,13 @@
   /* header */
   header{display:flex;align-items:center;gap:10px;padding:11px 15px;
     border-bottom:1px solid var(--line);background:var(--chrome)}
-  .logo{font-family:var(--disp);font-weight:700;font-size:19px;letter-spacing:.14em;
-    color:var(--ink)}
-  .logo b{color:var(--accent)}
+  .brand{display:flex;align-items:center;gap:9px}
+  .mark{flex:none;filter:drop-shadow(0 0 5px rgba(34,211,238,.45))}
+  .logo{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:.18em;
+    background:linear-gradient(92deg,#ff3ea5 0%,#c05cff 42%,#22d3ee 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 6px rgba(255,62,165,.35)) drop-shadow(0 0 10px rgba(34,211,238,.25))}
   .badge{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;
     padding:3px 7px;border-radius:4px;border:1px solid;line-height:1}
   .badge.live{color:var(--ok);border-color:#1c4c3c;background:#0a1a15}
@@ -71,6 +75,8 @@
     border-radius:8px;padding:9px 12px;font-family:var(--mono);display:none;
     backdrop-filter:blur(6px)}
   .chip.on{display:block}
+  .chip{cursor:pointer}
+  .chip:active{background:#0c1620ee}
   .chip .cs{font-size:15px;font-weight:700;color:var(--sel);letter-spacing:.04em}
   .chip .sub{font-size:11px;color:var(--ink-dim);margin-top:3px;line-height:1.5}
   .chip .hint{font-size:9px;color:var(--ink-faint);margin-top:5px;letter-spacing:.08em}
@@ -164,7 +170,18 @@
 <body>
 <div id="app"><div class="device">
   <header>
-    <div class="logo">SCO<b>P</b>E</div>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff3ea5"/><stop offset="1" stop-color="#22d3ee"/>
+        </linearGradient></defs>
+        <circle cx="16" cy="16" r="12.6" fill="none" stroke="url(#lg)" stroke-width="1.7"/>
+        <circle cx="16" cy="16" r="6.6" fill="none" stroke="url(#lg)" stroke-width="1" opacity=".55"/>
+        <line x1="16" y1="16" x2="26.5" y2="8" stroke="#22d3ee" stroke-width="1.5" opacity=".9"/>
+        <path d="M16 7.5 L20 17 L16 14.6 L12 17 Z" fill="url(#lg)"/>
+      </svg>
+      <span class="logo">SCOPE</span>
+    </div>
     <div id="badge" class="badge sim">SIM</div>
     <div id="clock" class="clock">--:--:--</div>
   </header>
@@ -366,6 +383,15 @@ const THEMES={
     css:{ "--bg":"#140c04","--bg0":"#0a0602","--chrome":"#130c04","--line":"#3a2a10",
       "--ink":"#ffe9c9","--ink-dim":"#c08a3a","--ink-faint":"#6b4a1c","--accent":"#ffb454",
       "--tab-on":"#22160880" } },
+  synth:{ label:"Synthwave", map:"dark_all",   // neon magenta + cyan over a purple-washed map
+    canvas:{ bg:"#0a0618", wash:"rgba(26,8,52,.5)", ring:"rgba(120,50,165,.7)",
+      ringStrong:"rgba(170,70,210,.9)", ringLabel:"#b06fe0", grid:"rgba(70,28,110,.8)",
+      cardinal:"#c58bef", accent:"#22d3ee", accentRGB:"34,211,238", sweepA:".17",
+      vectorRGB:"34,211,238", trailRGB:"255,80,175", plane:"#e8f7ff", sel:"#ff3ea5",
+      emerg:"#ff5b6e", tagText:"#7fe9ff", tagDim:"#c58bef", halo:"rgba(6,2,16,.78)" },
+    css:{ "--bg":"#0c0722","--bg0":"#060213","--chrome":"#0d0726","--line":"#2a144a",
+      "--ink":"#ecdcff","--ink-dim":"#a884d6","--ink-faint":"#5b3f86","--accent":"#22d3ee",
+      "--tab-on":"#1b0f3a" } },
   day:{ label:"Day", map:"rastertiles/voyager",   // colourful map under the dark UI shell
     canvas:{ bg:"#dfe7ec", wash:"rgba(18,40,55,.04)", ring:"rgba(30,75,105,.5)",
       ringStrong:"rgba(15,65,95,.75)", ringLabel:"#215a76", grid:"rgba(30,65,90,.45)",
@@ -512,6 +538,21 @@ async function poll(){
   updateWarn();
   setTimeout(poll,5000);
 }
+// Rough physical-size class → icon scale (1 = narrowbody baseline). Uses the
+// ADS-B wake category (A1..A7 / C = surface) when present, else the type code.
+function iconScale(cat,type){
+  const c=(cat||"").toUpperCase();
+  if(c[0]==="C") return .55;                                  // ground vehicle / obstacle
+  const byCat={A1:.72,A2:.84,A3:1,A4:1.16,A5:1.34,A6:1.05,A7:.7};
+  if(byCat[c]!=null) return byCat[c];
+  const t=(type||"").toUpperCase();
+  if(/^(A38|B74)/.test(t)) return 1.5;                        // A380 / 747 — the giants
+  if(/^(A35|A34|A33|B77|B78|B76|MD11|IL9|A30|A31)/.test(t)) return 1.34;  // widebodies
+  if(/^B75/.test(t)) return 1.16;                             // 757
+  if(/^(E1|E2|CRJ|CR[JX]|DH8|AT[47]|SF3|SW[34]|J32|E45|E7)/.test(t)) return .82;  // regional/turboprop
+  if(/^(C1|C2|PA|P28|SR2|DA[24]|BE|DV|R44|R66|EC|AS3|H2|H6)/.test(t)) return .68; // light GA / heli
+  return 1;                                                   // default narrowbody (A320/737/E190…)
+}
 function ingest(list){
   const now=Date.now(), seen=new Set();
   for(const a of list){
@@ -522,6 +563,7 @@ function ingest(list){
     p.lat=a.lat; p.lon=a.lon;
     p.cs=(a.flight||"").trim()||hex.toUpperCase();
     p.reg=a.r||""; p.type=a.t||"";
+    p.cat=a.category||""; p.icon=iconScale(a.category,a.t);
     p.alt=(a.alt_baro==="ground")?0:(a.alt_baro??null);
     p.onGround=a.alt_baro==="ground";
     p.gs=a.gs??0; p.track=a.track??a.true_heading??0;
@@ -570,7 +612,7 @@ function mkSim(hex){
   const em=Math.random()<0.06?["7700","7600","7500"][(Math.random()*3)|0]:
     String(1000+Math.floor(Math.random()*6000));
   return {hex,lat:pos.lat,lon:pos.lon,cs,reg:"VH-"+String.fromCharCode(65+Math.random()*26,65+Math.random()*26,65+Math.random()*26),
-    type:t,typeName:tn,alt:Math.floor(1+Math.random()*38)*1000,onGround:false,
+    type:t,typeName:tn,icon:iconScale(null,t),alt:Math.floor(1+Math.random()*38)*1000,onGround:false,
     gs:320+Math.floor(Math.random()*260),track:Math.random()*360,
     vs:(Math.random()-0.5)*3000|0,sqk:em,recvLat:pos.lat,recvLon:pos.lon,recvAt:Date.now(),
     from:fa,fromN:fan,to:to[0],toN:to[1],trail:[]};
@@ -653,12 +695,13 @@ function drawScope(t){
     ctx.lineWidth=isSel?2:1;
     ctx.beginPath();ctx.moveTo(x,y);
     ctx.lineTo(x+vlen*Math.sin(p.track*D2R),y-vlen*Math.cos(p.track*D2R));ctx.stroke();
-    // symbol (chevron rotated to track, halo-outlined so it reads over the map)
+    // symbol (chevron rotated to track, sized by aircraft class, halo-outlined)
+    const sc=isSel?(p.icon||1)*1.15:(p.icon||1);
     ctx.save();ctx.translate(x,y);ctx.rotate(p.track*D2R);
-    ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(5,5);ctx.lineTo(0,2);ctx.lineTo(-5,5);ctx.closePath();
+    ctx.beginPath();ctx.moveTo(0,-6*sc);ctx.lineTo(5*sc,5*sc);ctx.lineTo(0,2*sc);ctx.lineTo(-5*sc,5*sc);ctx.closePath();
     ctx.strokeStyle=TH.halo;ctx.lineWidth=2.5;ctx.stroke();
     ctx.fillStyle=col;ctx.fill();
-    if(isEm||isSel){ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,10,0,7);ctx.stroke();}
+    if(isEm||isSel){ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.arc(0,0,6+5*sc,0,7);ctx.stroke();}
     ctx.restore();
     // data block (authentic ATC tag) — drawn with a halo for legibility
     if(isSel||state.range<=50){
@@ -705,6 +748,11 @@ cv.addEventListener("pointerdown",e=>{
     else { state.sel=best.hex; showChip(best); lookupRoute(best); }
   } else { state.sel=null; $("chip").classList.remove("on"); }
 });
+// tapping the info card itself opens the full detail page
+$("chip").addEventListener("click",()=>{
+  if(state.auto) state.autoPauseUntil=Date.now()+25000;
+  const p=state.planes.get(state.sel); if(p) openDetail(p);
+});
 function showChip(p){
   $("chip").classList.add("on");
   $("chipCs").textContent=p.cs;
@@ -715,7 +763,7 @@ function showChip(p){
   let sub=parts.join(" · ");
   if(p.from&&p.to) sub+="<br>"+p.from+" → "+p.to;
   $("chipSub").innerHTML=sub;
-  $("chipHint").textContent=state.auto?"AUTO-CYCLING · TAP TO PAUSE":"TAP AGAIN FOR DETAILS";
+  $("chipHint").textContent=state.auto?"AUTO-CYCLING · TAP CARD FOR FULL INFO":"TAP CARD FOR FULL INFO";
 }
 // ── auto-cycle (attract mode for wall displays) ──────────────────────────────
 function advanceAuto(){

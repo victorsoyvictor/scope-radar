@@ -49,9 +49,15 @@ and falls back to airplanes.live if it's unreachable.
   registration, type, vertical rate, distance, bearing, squawk and route.
 - **Routes** from [adsbdb](https://api.adsbdb.com), looked up only when you open
   a detail card, and cached for two hours.
-- **Skins** — Night, Phosphor (green CRT), Amber, and Day, each swapping the
-  basemap, scope colours and UI together. Pick one under **SETTINGS**; the choice
-  is remembered, and `?skin=amber` in the URL presets it.
+- **Skins** — Night, Phosphor (green CRT), Amber, Day, and Synthwave (neon
+  magenta/cyan), each swapping the basemap, scope colours and UI together. Pick
+  one under **SETTINGS**; the choice is remembered, and `?skin=synth` in the URL
+  presets it.
+- **Size-scaled icons** — aircraft draw bigger or smaller by their real size
+  class (from the ADS-B wake category / type), so an A380 stands out from a
+  regional jet at a glance.
+- **Tap the plane or its info card** for the full detail page (type,
+  registration, vertical rate, distance, bearing, squawk, route).
 - **Range** 5 / 10 / 25 / 50 / 100 / 250 km.
 - **Emergency squawks** 7500, 7600 and 7700 raise a red banner.
 - **Nearest 96** aircraft are kept, matching the memory budget of the ESP32
