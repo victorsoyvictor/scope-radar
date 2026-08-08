@@ -184,7 +184,7 @@
     <div id="chip" class="chip">
       <div class="cs" id="chipCs">—</div>
       <div class="sub" id="chipSub"></div>
-      <div class="hint">TAP AGAIN FOR DETAILS</div>
+      <div class="hint" id="chipHint">TAP AGAIN FOR DETAILS</div>
     </div>
 
     <!-- detail card -->
@@ -222,6 +222,13 @@
       <h2>Settings</h2>
       <div class="field"><label>Skin</label>
         <div class="seg" id="skinSeg"></div></div>
+      <div class="field"><label>Auto‑cycle info (for wall displays)</label>
+        <div class="seg" id="autoSeg">
+          <button data-ms="0">Off</button>
+          <button data-ms="6000">6s</button>
+          <button data-ms="10000">10s</button>
+          <button data-ms="20000">20s</button>
+        </div></div>
       <div class="field"><label>Data source</label>
         <div class="seg" id="srcSeg">
           <button data-src="live">Live traffic</button>
@@ -396,6 +403,7 @@ const state={
   planes:new Map(),          // hex -> plane
   routes:new Map(),          // callsign -> {from,to,fromN,toN,exp}
   sel:null, detail:false,
+  auto:false, autoMs:10000, autoLast:0, autoPauseUntil:0,   // attract-mode cycling
   fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
   fps:0
 };
@@ -438,6 +446,7 @@ RANGES.forEach(km=>{const b=document.createElement("button");b.textContent=km;
 const skinSeg=$("skinSeg");
 Object.keys(THEMES).forEach(k=>{const b=document.createElement("button");
   b.textContent=THEMES[k].label;b.dataset.skin=k;b.onclick=()=>applyTheme(k);skinSeg.appendChild(b);});
+document.querySelectorAll("#autoSeg button").forEach(b=>b.onclick=()=>setAuto(+b.dataset.ms));
 document.querySelectorAll("#srcSeg button").forEach(b=>b.onclick=()=>{
   setSrc(b.dataset.src);});
 function setSrc(s){ state.src=s; state.fails=0; state.blocked=false;
@@ -690,17 +699,45 @@ cv.addEventListener("pointerdown",e=>{
     const d=Math.hypot(p._x-mx,p._y-my);
     if(d<bd){bd=d;best=p;}
   }
+  if(state.auto) state.autoPauseUntil=Date.now()+25000;   // a tap pauses attract-mode
   if(best){
     if(state.sel===best.hex){ openDetail(best); }
-    else { state.sel=best.hex; showChip(best); }
+    else { state.sel=best.hex; showChip(best); lookupRoute(best); }
   } else { state.sel=null; $("chip").classList.remove("on"); }
 });
 function showChip(p){
   $("chip").classList.add("on");
   $("chipCs").textContent=p.cs;
-  const fl=p.onGround?"on ground":(p.alt!=null?p.alt.toLocaleString()+" ft":"—");
-  $("chipSub").innerHTML=fl+" · "+Math.round(p.gs)+" kt";
+  const parts=[];
+  if(p.type) parts.push(p.type);
+  parts.push(p.onGround?"on ground":(p.alt!=null?p.alt.toLocaleString()+" ft":"—"));
+  parts.push(Math.round(p.gs)+" kt");
+  let sub=parts.join(" · ");
+  if(p.from&&p.to) sub+="<br>"+p.from+" → "+p.to;
+  $("chipSub").innerHTML=sub;
+  $("chipHint").textContent=state.auto?"AUTO-CYCLING · TAP TO PAUSE":"TAP AGAIN FOR DETAILS";
 }
+// ── auto-cycle (attract mode for wall displays) ──────────────────────────────
+function advanceAuto(){
+  const list=[...state.planes.values()].filter(p=>p._x!=null)
+    .sort((a,b)=>hav(state.lat,state.lon,a.lat,a.lon)-hav(state.lat,state.lon,b.lat,b.lon));
+  if(!list.length){ state.sel=null; $("chip").classList.remove("on"); return; }
+  const idx=list.findIndex(p=>p.hex===state.sel);
+  const next=list[(idx+1)%list.length];       // idx===-1 -> starts at 0
+  state.sel=next.hex; showChip(next); lookupRoute(next);
+}
+function setAuto(ms){
+  state.auto=ms>0; if(ms>0) state.autoMs=ms; state.autoLast=0;
+  document.querySelectorAll("#autoSeg button").forEach(x=>
+    x.classList.toggle("sel",(+x.dataset.ms)===(state.auto?state.autoMs:0)));
+  try{localStorage.setItem("scope.autoMs",state.auto?String(state.autoMs):"0");}catch(e){}
+}
+setInterval(()=>{
+  if(!state.auto||state.detail) return;
+  const now=Date.now();
+  if(now<state.autoPauseUntil||now-state.autoLast<state.autoMs) return;
+  advanceAuto(); state.autoLast=now;
+},400);
 async function openDetail(p){
   state.detail=true; $("detail").classList.add("on");
   $("dCs").textContent=p.cs; $("dReg").textContent=p.reg||"";
@@ -746,6 +783,7 @@ async function lookupRoute(p){
 }
 function applyRoute(p,r){
   if(!r.from)return; p.from=r.from;p.fromN=r.fromN;p.to=r.to;p.toN=r.toN;
+  if(state.sel===p.hex && $("chip").classList.contains("on")) showChip(p);  // add route to chip
   if(state.detail&&state.sel===p.hex){
     const rt=$("dRoute");rt.style.display="flex";
     $("dFrom").textContent=r.from;$("dFromN").textContent=r.fromN||"";
@@ -797,9 +835,15 @@ setInterval(()=>{const d=new Date();
 
 // ── boot ─────────────────────────────────────────────────────────────────────
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
+const params=new URLSearchParams(location.search);
 let savedTheme="night"; try{savedTheme=localStorage.getItem("scope.theme")||"night";}catch(e){}
-const urlSkin=new URLSearchParams(location.search).get("skin");   // ?skin=amber to preset
+const urlSkin=params.get("skin");                                 // ?skin=amber to preset
 applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
+// auto-cycle: ?cycle=10 (seconds) wins, else the remembered setting
+let autoMs=0; try{autoMs=+(localStorage.getItem("scope.autoMs")||0)||0;}catch(e){}
+const urlCycle=params.get("cycle");
+if(urlCycle!=null){ const s=parseFloat(urlCycle); autoMs=(s>0?Math.round(s*1000):0); }
+setAuto(autoMs);
 setRange(50); setSrc("live");
 requestAnimationFrame(()=>{resize();requestAnimationFrame(loop);poll();});
 </script>
