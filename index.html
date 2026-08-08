@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <title>Scope — plane radar</title>
-<meta http-equiv="refresh" content="0; url=web/radar.html">
+<!-- Forward to the app, PRESERVING the query string (?lat=&skin=&cycle=…) and hash.
+     A plain <meta refresh> would drop them, so redirect in JS and keep meta as a
+     no-JS fallback. -->
+<script>location.replace("web/radar.html" + location.search + location.hash);</script>
+<noscript><meta http-equiv="refresh" content="0; url=web/radar.html"></noscript>
 <link rel="canonical" href="web/radar.html">
 </head>
 <body>
