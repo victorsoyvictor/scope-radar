@@ -288,6 +288,11 @@
           <button data-src="live">Live traffic</button>
           <button data-src="sim">Simulated</button>
         </div></div>
+      <div class="field"><label>Grounded aircraft (taxiing / on runway)</label>
+        <div class="seg" id="groundSeg">
+          <button data-v="0">Off</button>
+          <button data-v="1">On</button>
+        </div></div>
       <div class="field"><label>Centre latitude</label><input id="inLat" inputmode="decimal"></div>
       <div class="field"><label>Centre longitude</label><input id="inLon" inputmode="decimal"></div>
       <button class="btn" id="applyCentre">APPLY CENTRE</button>
@@ -412,15 +417,15 @@ const THEMES={
     css:{ "--bg":"#04140c","--bg0":"#010a06","--chrome":"#03130b","--line":"#123024",
       "--ink":"#d6ffe6","--ink-dim":"#5fb383","--ink-faint":"#2f6647","--accent":"#43ff8f",
       "--tab-on":"#08201380" } },
-  amber:{ label:"Amber", map:"dark_all",
-    canvas:{ bg:"#140c02", wash:"rgba(28,17,2,.5)", ring:"rgba(84,58,20,.8)",
-      ringStrong:"rgba(140,96,30,.95)", ringLabel:"#a9793a", grid:"rgba(64,44,16,.85)",
-      cardinal:"#c08a3a", accent:"#ffb454", accentRGB:"255,180,84", sweepA:".15",
-      vectorRGB:"255,170,70", trailRGB:"210,160,90", plane:"#ffd79a", sel:"#7dd3fc",
-      emerg:"#ff5b5b", tagText:"#ffd79a", tagDim:"#c08a3a", halo:"rgba(0,0,0,.72)" },
-    css:{ "--bg":"#140c04","--bg0":"#0a0602","--chrome":"#130c04","--line":"#3a2a10",
-      "--ink":"#ffe9c9","--ink-dim":"#c08a3a","--ink-faint":"#6b4a1c","--accent":"#ffb454",
-      "--tab-on":"#22160880" } },
+  red:{ label:"Red", map:"dark_all",   // monochrome red — preserves night vision, like stargazing apps
+    canvas:{ bg:"#0d0202", wash:"rgba(20,2,2,.5)", ring:"rgba(100,20,20,.8)",
+      ringStrong:"rgba(170,35,35,.95)", ringLabel:"#c24444", grid:"rgba(80,15,15,.85)",
+      cardinal:"#b33a3a", accent:"#ff4040", accentRGB:"255,64,64", sweepA:".16",
+      vectorRGB:"255,80,80", trailRGB:"200,90,90", plane:"#ffb0b0", sel:"#ffd166",
+      emerg:"#ff1a1a", tagText:"#ffb0b0", tagDim:"#b33a3a", halo:"rgba(0,0,0,.72)" },
+    css:{ "--bg":"#0d0303","--bg0":"#080101","--chrome":"#0c0303","--line":"#3a1010",
+      "--ink":"#ffd9d9","--ink-dim":"#b34a4a","--ink-faint":"#6b2020","--accent":"#ff4040",
+      "--tab-on":"#220a0a80" } },
   synth:{ label:"Synthwave", map:"dark_all",   // neon magenta + cyan over a purple-washed map
     canvas:{ bg:"#0a0618", wash:"rgba(26,8,52,.5)", ring:"rgba(120,50,165,.7)",
       ringStrong:"rgba(170,70,210,.9)", ringLabel:"#b06fe0", grid:"rgba(70,28,110,.8)",
@@ -474,7 +479,7 @@ const state={
   src:"live", theme:"night", lat:-37.6733, lon:144.8433, range:50,     // Melbourne Airport
   planes:new Map(),          // hex -> plane
   routes:new Map(),          // callsign -> {from,to,fromN,toN,exp}
-  sel:null, detail:false,
+  sel:null, detail:false, showGround:false,   // grounded aircraft hidden by default
   auto:false, autoMs:10000, autoLast:0, autoPauseUntil:0,   // attract-mode cycling
   fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
   fps:0
@@ -527,6 +532,21 @@ function setSrc(s){ state.src=s; state.fails=0; state.blocked=false;
   const bd=$("badge");
   if(s==="sim"){bd.className="badge sim";bd.textContent="SIM";seedSim();}
   else {bd.className="badge live";bd.textContent="LIVE";state.planes.clear();}
+}
+document.querySelectorAll("#groundSeg button").forEach(b=>
+  b.onclick=()=>setGroundVisible(b.dataset.v==="1"));
+function setGroundVisible(v){
+  state.showGround=v;
+  document.querySelectorAll("#groundSeg button").forEach(x=>
+    x.classList.toggle("sel",(x.dataset.v==="1")===v));
+  if(!v){                                        // hiding: drop a selection that's now invisible
+    const p=state.sel&&state.planes.get(state.sel);
+    if(p&&p.onGround){
+      state.sel=null; $("chip").classList.remove("on");
+      if(state.detail){state.detail=false;$("detail").classList.remove("on");}
+    }
+  }
+  try{localStorage.setItem("scope.showGround",v?"1":"0");}catch(e){}
 }
 $("applyCentre").onclick=()=>{
   const la=parseFloat($("inLat").value),lo=parseFloat($("inLon").value);
@@ -713,8 +733,10 @@ function drawScope(t){
   ctx.fillStyle=TH.accent;ctx.beginPath();ctx.arc(cx,cy,3,0,7);ctx.fill();
   ctx.strokeStyle="rgba("+TH.accentRGB+",.5)";ctx.lineWidth=1;ctx.beginPath();ctx.arc(cx,cy,6,0,7);ctx.stroke();
 
-  const now=Date.now(); let emergMsg=null;
+  const now=Date.now(); let emergMsg=null, shown=0;
   for(const p of state.planes.values()){
+    if(p.onGround&&!state.showGround){p._x=null;continue;}   // grounded aircraft hidden by default
+    shown++;
     const dtp=Math.min((now-p.recvAt)/1000,20);
     const step=p.onGround?0:p.gs*KM_PER_NM/3600*dtp;
     const pos=step>0?dest(p.recvLat,p.recvLon,p.track,step):{lat:p.recvLat,lon:p.recvLon};
@@ -766,7 +788,7 @@ function drawScope(t){
   const eb=$("emerg");
   if(emergMsg){eb.classList.add("on");eb.textContent="⚠ EMERGENCY "+emergMsg;}
   else eb.classList.remove("on");
-  $("count").textContent=state.planes.size+" aircraft";
+  $("count").textContent=shown+" aircraft";
 }
 
 // ── loop ─────────────────────────────────────────────────────────────────────
@@ -908,6 +930,7 @@ function typeName(t){const m={B738:"Boeing 737-800",A320:"Airbus A320",A21N:"Air
 // ── list / diag ──────────────────────────────────────────────────────────────
 function renderList(){
   const arr=[...state.planes.values()]
+    .filter(p=>state.showGround||!p.onGround)
     .map(p=>({p,d:hav(state.lat,state.lon,p.lat,p.lon)}))
     .sort((a,b)=>a.d-b.d);
   const body=$("listBody"); body.innerHTML="";
@@ -1020,13 +1043,16 @@ setInterval(()=>fetchWeather(false),120000);   // re-check; the cache gates real
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
 const params=new URLSearchParams(location.search);
 let savedTheme="night"; try{savedTheme=localStorage.getItem("scope.theme")||"night";}catch(e){}
-const urlSkin=params.get("skin");                                 // ?skin=amber to preset
+const urlSkin=params.get("skin");                                 // ?skin=red to preset
 applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
 // auto-cycle: ?cycle=10 (seconds) wins, else the remembered setting
 let autoMs=0; try{autoMs=+(localStorage.getItem("scope.autoMs")||0)||0;}catch(e){}
 const urlCycle=params.get("cycle");
 if(urlCycle!=null){ const s=parseFloat(urlCycle); autoMs=(s>0?Math.round(s*1000):0); }
 setAuto(autoMs);
+// grounded aircraft: remembered setting, off by default
+let savedGround=false; try{savedGround=localStorage.getItem("scope.showGround")==="1";}catch(e){}
+setGroundVisible(savedGround);
 // ?lat= &lon= centre the scope; ?range= km (snapped to the nearest step); ?src=live|sim
 const qLat=parseFloat(params.get("lat")), qLon=parseFloat(params.get("lon"));
 if(isFinite(qLat)&&qLat>=-90&&qLat<=90) state.lat=qLat;
