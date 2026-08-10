@@ -49,10 +49,10 @@ and falls back to airplanes.live if it's unreachable.
   registration, type, vertical rate, distance, bearing, squawk and route.
 - **Routes** from [adsbdb](https://api.adsbdb.com), looked up only when you open
   a detail card, and cached for two hours.
-- **Skins** — Night, Phosphor (green CRT), Amber, Day, and Synthwave (neon
-  magenta/cyan), each swapping the basemap, scope colours and UI together. Pick
-  one under **SETTINGS**; the choice is remembered, and `?skin=synth` in the URL
-  presets it.
+- **Skins** — Night, Phosphor (green CRT), Red (monochrome red, preserves night
+  vision like a stargazing app), Day, and Synthwave (neon magenta/cyan), each
+  swapping the basemap, scope colours and UI together. Pick one under
+  **SETTINGS**; the choice is remembered, and `?skin=synth` in the URL presets it.
 - **Size-scaled icons** — aircraft draw bigger or smaller by their real size
   class (from the ADS-B wake category / type), so an A380 stands out from a
   regional jet at a glance.
@@ -64,6 +64,8 @@ and falls back to airplanes.live if it's unreachable.
 - **Ambient music** — an optional speaker button plays a YouTube track (loaded
   only on tap; browsers block auto-play with sound). Set `MUSIC_ID` / `MUSIC_START`
   near the top of the script, or `MUSIC_ID=""` to hide it.
+- **Grounded aircraft** (taxiing / on the runway) are hidden by default to cut
+  clutter near airports — flip them on under **SETTINGS**.
 - **Range** 5 / 10 / 25 / 50 / 100 / 250 km.
 - **Emergency squawks** 7500, 7600 and 7700 raise a red banner.
 - **Nearest 96** aircraft are kept, matching the memory budget of the ESP32
@@ -111,7 +113,7 @@ keyboard. All are optional and combine with `&`:
 
 | Parameter | Values | Meaning |
 |-----------|--------|---------|
-| `skin`    | `night` · `phosphor` · `amber` · `day` · `synth` | colour theme |
+| `skin`    | `night` · `phosphor` · `red` · `day` · `synth` | colour theme |
 | `cycle`   | seconds (e.g. `10`; `0` = off) | auto-cycle through aircraft |
 | `lat`     | −90…90    | centre latitude |
 | `lon`     | −180…180  | centre longitude |
