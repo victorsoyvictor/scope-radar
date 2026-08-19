@@ -494,6 +494,7 @@ let RELAYS=[
 
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
+const DIRECT_RETRY_MS=600000;   // how often to re-probe the feeds without a relay
 // Use the same-origin proxy only when we're actually served by it — i.e. on
 // localhost or a private-LAN address. On a public host (e.g. GitHub Pages) there
 // is no proxy, so we skip it and fetch airplanes.live directly (it sends CORS).
@@ -510,6 +511,7 @@ const state={
   auto:false, autoMs:10000, autoLast:0, autoPauseUntil:0,   // attract-mode cycling
   fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
   feed:null, lastGood:null,       // which candidate served us last — retried first
+  directNextTry:0,                // re-probe the CORS-less direct feeds after this
   fps:0
 };
 
@@ -606,22 +608,31 @@ async function poll(){
   //   direct  — straight at the feeds. Both speak the ADSBExchange schema, but
   //             as of Aug 2026 neither sends Access-Control-Allow-Origin, so a
   //             browser refuses to read the response even though it arrives.
-  //             Kept first anyway: it costs one request, needs no third party,
-  //             and starts working by itself the day a feed adds the header.
+  //             Still worth probing — it needs no third party and would start
+  //             working by itself the day a feed adds the header — but only
+  //             every DIRECT_RETRY_MS, because each doomed attempt logs a CORS
+  //             error and the console is where real problems have to be visible.
   //   relay   — the same feeds through a CORS relay, which is what actually
   //             works on static hosting today. See RELAYS above.
   const feeds=[
     {name:"adsb.lol",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`},
     {name:"airplanes.live",url:`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`},
   ];
+  // adsb.fi sends no CORS header at all, so it is worthless directly — but behind
+  // a relay that is irrelevant, and it is a feed neither of the others can
+  // rate-limit. Worth having when adsb.lol starts answering 429/420, which it
+  // does readily: a Worker leaves through Cloudflare IPs shared with everyone.
+  const relayFeeds=[...feeds,
+    {name:"adsb.fi",url:`https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${nm}`}];
   const cands=[];
   if(viaProxy) cands.push({name:"proxy",url:`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`});
-  for(const f of feeds) cands.push(f);
+  if(Date.now()>=state.directNextTry)
+    for(const f of feeds) cands.push({...f,direct:true});
   // Relay goes last, always: when the bundled proxy is really running it wins
   // first and the relay is never reached, but "served from localhost" does not
   // guarantee the proxy is up (a plain static server on :8000 looks identical),
   // so there still has to be something behind it.
-  for(const r of RELAYS) for(const f of feeds)
+  for(const r of RELAYS) for(const f of relayFeeds)
     cands.push({name:f.name+" via "+r.name,url:r.wrap(f.url)});
   // Whatever worked last time goes first, so the steady state is one request per
   // poll instead of re-failing through the dead direct attempts every 5 s.
@@ -653,9 +664,11 @@ async function poll(){
       ingest(data.ac||[]);
       state.fails=0; state.lastFetch="OK"; state.blocked=false;
       state.feed=c.name; state.lastGood=c.name;
+      if(c.direct) state.directNextTry=0;      // it works — stop rationing it
       $("badge").className="badge live"; $("badge").textContent="LIVE";
       updateWarn(); setTimeout(poll,5000); return;
     }catch(e){                     // note which feed failed and why, then try the next
+      if(c.direct) state.directNextTry=Date.now()+DIRECT_RETRY_MS;
       errs.push(c.name+": "+String((e&&e.message)||e||"fetch").slice(0,28));
     }
   }
