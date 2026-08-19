@@ -30,36 +30,37 @@ const ALLOWED = new Set([
 const UA = "scope-radar (personal, non-commercial)";
 const CACHE_SECONDS = 4;          // feeds update ~1 Hz; this shields them from bursts
 
-function cors(origin) {
-  return {
-    "Access-Control-Allow-Origin": origin,
-    "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Accept",
-    "Access-Control-Max-Age": "86400",
-  };
-}
+// Always "*", never the caller's Origin echoed back. The data is public and no
+// credentials are ever sent, so there is nothing to scope — and echoing would
+// need a Vary: Origin on every response or a cache could hand one origin's
+// answer ("allowed for dash.cloudflare.com") to a different site, which the
+// browser then rejects. A constant header has no such failure mode.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,OPTIONS",
+  "Access-Control-Allow-Headers": "Accept",
+  "Access-Control-Max-Age": "86400",
+};
 
-function json(body, status, origin) {
+function json(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...cors(origin) },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }
 
 export default {
   async fetch(request) {
-    const origin = request.headers.get("Origin") || "*";
-
-    if (request.method === "OPTIONS") return new Response(null, { headers: cors(origin) });
-    if (request.method !== "GET") return json({ error: "GET only" }, 405, origin);
+    if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
+    if (request.method !== "GET") return json({ error: "GET only" }, 405);
 
     const target = new URL(request.url).searchParams.get("url");
-    if (!target) return json({ error: "missing ?url=" }, 400, origin);
+    if (!target) return json({ error: "missing ?url=" }, 400);
 
     let t;
-    try { t = new URL(target); } catch { return json({ error: "malformed url" }, 400, origin); }
-    if (t.protocol !== "https:") return json({ error: "https only" }, 400, origin);
-    if (!ALLOWED.has(t.hostname)) return json({ error: "host not allowed: " + t.hostname }, 403, origin);
+    try { t = new URL(target); } catch { return json({ error: "malformed url" }, 400); }
+    if (t.protocol !== "https:") return json({ error: "https only" }, 400);
+    if (!ALLOWED.has(t.hostname)) return json({ error: "host not allowed: " + t.hostname }, 403);
 
     let upstream;
     try {
@@ -68,7 +69,7 @@ export default {
         cf: { cacheTtl: CACHE_SECONDS, cacheEverything: true },
       });
     } catch (e) {
-      return json({ error: "upstream failed: " + e }, 502, origin);
+      return json({ error: "upstream failed: " + e }, 502);
     }
 
     // Pass the body straight through; only the CORS headers are ours.
@@ -77,7 +78,7 @@ export default {
       headers: {
         "Content-Type": upstream.headers.get("Content-Type") || "application/json",
         "Cache-Control": "no-store",
-        ...cors(origin),
+        ...CORS,
       },
     });
   },
