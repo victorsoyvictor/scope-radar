@@ -20,11 +20,13 @@ open web/radar.html      # or double-click it
 
 Opened directly, the page pulls live traffic from
 [adsb.lol](https://adsb.lol), falling back to
-[airplanes.live](https://airplanes.live). Both send CORS headers, so the browser
-lets them through.
+[airplanes.live](https://airplanes.live) — through a CORS relay, because neither
+feed lets a browser read it directly any more. See
+[Feeds, CORS and the relay](#feeds-cors-and-the-relay); it works out of the box,
+but the relay is worth pointing at your own once you care.
 
 Or run the bundled proxy to use [adsb.fi](https://adsb.fi) instead, with shared
-rate-limiting and caching across tabs:
+rate-limiting and caching across tabs — and no relay in the picture at all:
 
 ```bash
 python3 proxy/serve.py
@@ -32,7 +34,7 @@ python3 proxy/serve.py
 ```
 
 No dependencies. Python 3.9 or newer. Served this way the page prefers the proxy
-and falls back to the public feeds if it's unreachable.
+and only falls back to the public feeds if it's unreachable.
 
 ## What it does
 
@@ -77,12 +79,35 @@ and falls back to the public feeds if it's unreachable.
   unreachable or the sky is empty. The badge in the header always says which
   mode you're in: `LIVE`, `SIM`, or `NO FEED`.
 
-## Why the proxy exists
+## Feeds, CORS and the relay
 
-It's optional now — adsb.lol and airplanes.live send `Access-Control-Allow-Origin`,
-so the page reads them straight from the browser. adsb.fi does **not** send that header, so
-a browser fetches its response and then refuses to let the page read it; the proxy
-puts the page and adsb.fi on one origin to get around that.
+As of August 2026 none of the public ADS-B feeds send an
+`Access-Control-Allow-Origin` header. They answer a browser perfectly well — the
+bytes arrive — but without that header the browser refuses to hand the response
+to the page, and DevTools shows `CORS Missing Allow Origin`. That check exists to
+stop any page you visit from quietly reading other origins using your cookies and
+your network position; the feed has to opt in, and none of them do.
+
+That leaves a page with no server of its own two ways to read a feed:
+
+- **The bundled proxy** — `python3 proxy/serve.py` serves the page *and* the feed
+  from one origin, so there is no cross-origin read to block. Best option when
+  you're running it locally anyway.
+- **A CORS relay** — something that fetches the feed server-side and re-serves it
+  with the header attached. This is what makes a static deploy (GitHub Pages, a
+  `file://` copy) work. `RELAY` near the top of `web/radar.html` sets it.
+
+`RELAY` ships pointing at a public relay so the page works unconfigured, but that
+is a shared third party: it can rate-limit you, and every query goes through
+someone else's server. `proxy/worker.js` is a ~40-line Cloudflare Worker that does
+the same job on your own account — free tier, about two minutes to deploy, and it
+only relays an allowlist of feed hosts so it can't be abused as an open proxy.
+Point `RELAY` at it, or pass `?relay=<url>`; `?relay=` on its own turns relaying
+off and goes direct.
+
+Direct requests are still tried first on every poll, so the day a feed starts
+sending the header again the relay quietly stops being used. DIAG's **Mode** row
+names whichever path actually served the data, e.g. `LIVE · adsb.lol via relay`.
 
 `proxy/serve.py` also does two things worth having on their own:
 
@@ -96,7 +121,8 @@ puts the page and adsb.fi on one origin to get around that.
 
 ```
 web/radar.html      the entire front end — one file, no build step
-proxy/serve.py      static server + CORS relay + rate limiter
+proxy/serve.py      static server + CORS relay + rate limiter (run it locally)
+proxy/worker.js     the same CORS relay as a Cloudflare Worker (for static hosts)
 scripts/version.py  stamps `git describe` into radar.html for a static deploy
 docs/HARDWARE.md    the display board, what to buy, what to avoid
 ```
@@ -135,6 +161,7 @@ keyboard. All are optional and combine with `&`:
 | `lon`     | −180…180  | centre longitude |
 | `range`   | km (snaps to 5/10/25/50/100/250) | initial range |
 | `src`     | `live` · `sim` | data source |
+| `relay`   | a CORS relay URL ending in `?url=`; empty = go direct | overrides `RELAY` |
 
 A URL value overrides the remembered setting and is then saved. Example — a
 London-Heathrow wall in the neon skin, cycling every 10 s:
