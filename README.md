@@ -95,15 +95,21 @@ That leaves a page with no server of its own two ways to read a feed:
   you're running it locally anyway.
 - **A CORS relay** — something that fetches the feed server-side and re-serves it
   with the header attached. This is what makes a static deploy (GitHub Pages, a
-  `file://` copy) work. `RELAY` near the top of `web/radar.html` sets it.
+  `file://` copy) work. `RELAYS` near the top of `web/radar.html` lists them.
 
-`RELAY` ships pointing at a public relay so the page works unconfigured, but that
-is a shared third party: it can rate-limit you, and every query goes through
-someone else's server. `proxy/worker.js` is a ~40-line Cloudflare Worker that does
-the same job on your own account — free tier, about two minutes to deploy, and it
-only relays an allowlist of feed hosts so it can't be abused as an open proxy.
-Point `RELAY` at it, or pass `?relay=<url>`; `?relay=` on its own turns relaying
+`RELAYS` ships with a couple of public relays so the page works unconfigured, but
+those are shared third parties: they rate-limit, they go down, and every query
+passes through someone else's server. Treat them as a stopgap.
+`proxy/worker.js` is a ~40-line Cloudflare Worker that does the same job on your
+own account — free tier, about two minutes to deploy, and it only relays an
+allowlist of feed hosts so it can't be abused as an open proxy. Put it at the
+front of `RELAYS`, or pass `?relay=<url>`; `?relay=` on its own turns relaying
 off and goes direct.
+
+A relay answering `200` is not the same as a relay working: they will happily
+return their own `{"error": …}` as valid JSON. Every reply has to carry an `ac`
+array or it counts as a failure and the next candidate is tried, with the first
+40 characters of what came back shown in DIAG.
 
 Direct requests are still tried first on every poll, so the day a feed starts
 sending the header again the relay quietly stops being used. DIAG's **Mode** row
@@ -161,7 +167,7 @@ keyboard. All are optional and combine with `&`:
 | `lon`     | −180…180  | centre longitude |
 | `range`   | km (snaps to 5/10/25/50/100/250) | initial range |
 | `src`     | `live` · `sim` | data source |
-| `relay`   | a CORS relay URL ending in `?url=`; empty = go direct | overrides `RELAY` |
+| `relay`   | a CORS relay URL ending in `?url=`; empty = go direct | replaces `RELAYS` |
 
 A URL value overrides the remembered setting and is then saved. Example — a
 London-Heathrow wall in the neon skin, cycling every 10 s:
