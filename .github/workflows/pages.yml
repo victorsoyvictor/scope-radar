@@ -1,0 +1,50 @@
+# Deploys the site to GitHub Pages, stamping the real build version first.
+#
+# Pages' built-in "deploy from branch" publishes files exactly as committed, so
+# APP_VERSION would stay whatever literal is in the file. This runs
+# scripts/version.py on the checkout, so DIAG shows the actual `git describe`
+# output (1.0, or 1.0-2-gabc1234 for commits past the tag) without anyone having
+# to remember to stamp it by hand.
+#
+# Requires Settings -> Pages -> Source = "GitHub Actions" (one-time change).
+
+name: Deploy to Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race; a queued one supersedes an older running one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history + tags, or `git describe` sees nothing
+
+      - name: Stamp build version into radar.html
+        run: |
+          python3 scripts/version.py
+          grep -o 'const APP_VERSION="[^"]*"' web/radar.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
