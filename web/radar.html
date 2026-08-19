@@ -169,9 +169,11 @@
   .diag{font-family:var(--mono);font-size:12px}
   .diag .sec{color:var(--accent);font-size:11px;letter-spacing:.1em;
     margin:14px 0 7px;text-transform:uppercase}
-  .diag .ln{display:flex;justify-content:space-between;padding:5px 0;
+  .diag .ln{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
     border-bottom:1px solid #0c1822;color:var(--ink-dim)}
-  .diag .ln b{color:var(--ink);font-weight:500}
+  .diag .ln>span{flex:none}
+  .diag .ln b{color:var(--ink);font-weight:500;text-align:right;
+    min-width:0;overflow-wrap:anywhere}   /* feed errors can run long — wrap, don't clip */
   .diag .ln b.ok{color:var(--ok)} .diag .ln b.bad{color:var(--emerg)}
   /* tab bar */
   nav{display:flex;border-top:1px solid var(--line);background:var(--chrome)}
@@ -489,7 +491,7 @@ const state={
   routes:new Map(),          // callsign -> {from,to,fromN,toN,exp}
   sel:null, detail:false, showGround:false,   // grounded aircraft hidden by default
   auto:false, autoMs:10000, autoLast:0, autoPauseUntil:0,   // attract-mode cycling
-  fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
+  fails:0, lastFetch:null, latency:null, payload:null, blocked:false, feed:null,
   fps:0
 };
 
@@ -570,7 +572,7 @@ $("useLoc").onclick=()=>{
   },()=>{});
 };
 
-// ── live fetch (proxy → airplanes.live) ──────────────────────────────────────
+// ── live fetch (proxy → adsb.lol → airplanes.live) ───────────────────────────
 async function poll(){
   // state.blocked means we fell back to sim automatically (feed was unreachable),
   // as opposed to the user picking Simulated by hand — keep probing in the
@@ -579,20 +581,23 @@ async function poll(){
   if(state.src!=="live"&&!state.blocked){ setTimeout(poll,5000); return; }
   const nm=Math.min(250,Math.ceil(state.range/KM_PER_NM*1.15));
   const lat=state.lat.toFixed(4), lon=state.lon.toFixed(4);
-  // Feeds are tried in order. The bundled proxy (when it's serving us) shares one
-  // rate-limited adsb.fi call across all tabs. api.airplanes.live is a public feed
-  // that DOES send CORS headers and uses the same schema, so it works straight from
-  // the browser — opening radar.html directly still shows real traffic, no backend.
-  // adsb.fi is intentionally not fetched directly: it sends no CORS header, so a
-  // browser can never read it cross-origin and it would only ever fall back to sim.
-  const urls=[];
-  if(viaProxy) urls.push(`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`);
-  urls.push(`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`);
+  // Feeds are tried in order, first one that answers wins. The bundled proxy (when
+  // it's serving us) shares one rate-limited adsb.fi call across all tabs. The two
+  // public feeds both speak the ADSBExchange schema and send CORS headers, so they
+  // work straight from the browser — opening radar.html directly still shows real
+  // traffic, no backend. adsb.lol goes first: airplanes.live archived its public
+  // API repo in April 2026 and has been unreliable since. adsb.fi is deliberately
+  // not fetched directly — it sends no CORS header, so a browser could never read
+  // it cross-origin and it would only ever fall through to sim.
+  const cands=[];
+  if(viaProxy) cands.push({name:"proxy",url:`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`});
+  cands.push({name:"adsb.lol",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`});
+  cands.push({name:"airplanes.live",url:`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`});
   const t0=performance.now();
-  let lastErr=null;
-  for(const url of urls){
+  const errs=[];
+  for(const c of cands){
     try{
-      const res=await fetch(url,{headers:{Accept:"application/json"}});
+      const res=await fetch(c.url,{headers:{Accept:"application/json"}});
       if(!res.ok) throw new Error("HTTP "+res.status);
       const txt=await res.text();
       state.latency=Math.round(performance.now()-t0);
@@ -604,13 +609,15 @@ async function poll(){
           x.classList.toggle("sel",x.dataset.src==="live"));
       }
       ingest(data.ac||[]);
-      state.fails=0; state.lastFetch="OK"; state.blocked=false;
+      state.fails=0; state.lastFetch="OK"; state.blocked=false; state.feed=c.name;
       $("badge").className="badge live"; $("badge").textContent="LIVE";
       updateWarn(); setTimeout(poll,5000); return;
-    }catch(e){ lastErr=e; }        // try the next candidate before giving up
+    }catch(e){                     // note which feed failed and why, then try the next
+      errs.push(c.name+": "+String((e&&e.message)||e||"fetch").slice(0,28));
+    }
   }
-  // every candidate failed (offline, or both feeds unreachable)
-  state.fails++; state.lastFetch="ERR: "+String((lastErr&&lastErr.message)||lastErr||"fetch").slice(0,40);
+  // every candidate failed (offline, or all feeds unreachable)
+  state.fails++; state.feed=null; state.lastFetch="ERR · "+errs.join(" · ");
   if(state.fails>=2 && !state.blocked){
     state.blocked=true;                 // offline -> fall back to simulation
     $("badge").className="badge off"; $("badge").textContent="NO FEED";
@@ -965,7 +972,8 @@ function renderList(){
 }
 function renderDiag(){
   $("gVer").textContent=APP_VERSION;
-  $("gMode").textContent=state.blocked?"SIM (feed offline)":(state.src==="live"?(viaProxy?"LIVE · proxy":"LIVE · airplanes.live"):"SIM");
+  $("gMode").textContent=state.blocked?"SIM (feed offline)":
+    (state.src==="live"?("LIVE · "+(state.feed||"connecting…")):"SIM");
   $("gMode").className=state.src==="live"&&!state.blocked?"ok":"";
   $("gCentre").textContent=state.lat.toFixed(3)+", "+state.lon.toFixed(3);
   {const pr=computeProj();$("gRange").textContent=state.range+" km · map z"+(pr.Z+Math.log2(pr.scale)).toFixed(1);}

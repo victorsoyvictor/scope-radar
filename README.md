@@ -19,8 +19,9 @@ open web/radar.html      # or double-click it
 ```
 
 Opened directly, the page pulls live traffic from
-[airplanes.live](https://airplanes.live), which sends CORS headers so the browser
-lets it through.
+[adsb.lol](https://adsb.lol), falling back to
+[airplanes.live](https://airplanes.live). Both send CORS headers, so the browser
+lets them through.
 
 Or run the bundled proxy to use [adsb.fi](https://adsb.fi) instead, with shared
 rate-limiting and caching across tabs:
@@ -31,7 +32,7 @@ python3 proxy/serve.py
 ```
 
 No dependencies. Python 3.9 or newer. Served this way the page prefers the proxy
-and falls back to airplanes.live if it's unreachable.
+and falls back to the public feeds if it's unreachable.
 
 ## What it does
 
@@ -39,8 +40,10 @@ and falls back to airplanes.live if it's unreachable.
   (OpenStreetMap data) is drawn behind the scope and aircraft sit on their true
   geographic positions. Free, no API key, and it sends CORS headers so it loads
   straight from the browser.
-- **Live traffic** from [airplanes.live](https://airplanes.live) (or [adsb.fi](https://adsb.fi)
-  through the proxy), polled every 5 seconds.
+- **Live traffic** polled every 5 seconds, from the first feed that answers:
+  [adsb.lol](https://adsb.lol), then [airplanes.live](https://airplanes.live) —
+  or [adsb.fi](https://adsb.fi) through the proxy. DIAG names the feed in use,
+  and lists the per-feed error when none of them answer.
 - **Dead reckoning** between polls. Each aircraft is projected along its last
   reported track at its last reported ground speed, so motion stays smooth on a
   slow poll. The projection is capped at 20 seconds — an aircraft that stops
@@ -76,8 +79,8 @@ and falls back to airplanes.live if it's unreachable.
 
 ## Why the proxy exists
 
-It's optional now — airplanes.live sends `Access-Control-Allow-Origin`, so the
-page reads it straight from the browser. adsb.fi does **not** send that header, so
+It's optional now — adsb.lol and airplanes.live send `Access-Control-Allow-Origin`,
+so the page reads them straight from the browser. adsb.fi does **not** send that header, so
 a browser fetches its response and then refuses to let the page read it; the proxy
 puts the page and adsb.fi on one origin to get around that.
 
@@ -142,9 +145,12 @@ London-Heathrow wall in the neon skin, cycling every 10 s:
 
 ## Data sources and terms
 
-- Aircraft positions: [adsb.fi](https://adsb.fi) — free, no key, **personal and
-  non-commercial use only**, one request per second, and they ask that you credit
-  them. If you find this useful, consider running a receiver and feeding back.
+- Aircraft positions, all free and keyless, all **personal and non-commercial use
+  only**: [adsb.lol](https://adsb.lol) and [airplanes.live](https://airplanes.live)
+  straight from the browser, [adsb.fi](https://adsb.fi) through the proxy (one
+  request per second, and they ask that you credit them). All three are
+  community-run; if you find this useful, consider running a receiver and feeding
+  back.
 - Routes: [adsbdb](https://www.adsbdb.com).
 
 Aircraft are only visible here because volunteers run receivers and share what
