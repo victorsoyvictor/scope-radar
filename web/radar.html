@@ -310,6 +310,8 @@
     <div id="diagView" class="view">
       <h2>Diagnostics</h2>
       <div class="diag">
+        <div class="sec">Build</div>
+        <div class="ln"><span>Version</span><b id="gVer">—</b></div>
         <div class="sec">Source</div>
         <div class="ln"><span>Mode</span><b id="gMode">—</b></div>
         <div class="ln"><span>Centre</span><b id="gCentre">—</b></div>
@@ -464,6 +466,12 @@ const REVOLUT_URL="https://revolut.me/vsanchezalonso";
 // Ambient music: a YouTube video embedded on demand (nothing loads until you tap
 // the speaker). Set MUSIC_ID="" to hide the button. MUSIC_START = start seconds.
 const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
+// Build version, shown in DIAG. "dev" means an unstamped copy — opened straight
+// from a working tree. `python3 scripts/version.py` bakes `git describe` into a
+// static copy before you deploy it (GitHub Pages, a USB stick…); the bundled
+// proxy (proxy/serve.py) stamps it live from your git checkout on every request,
+// so a copy served that way never needs the script.
+const APP_VERSION="dev";
 
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
@@ -735,6 +743,8 @@ function drawScope(t){
 
   const now=Date.now(); let emergMsg=null, shown=0;
   for(const p of state.planes.values()){
+    const isEm=EMERG[p.sqk];
+    if(isEm) emergMsg=EMERG[p.sqk];   // always alert on emergency squawks, even hidden grounded ones
     if(p.onGround&&!state.showGround){p._x=null;continue;}   // grounded aircraft hidden by default
     shown++;
     const dtp=Math.min((now-p.recvAt)/1000,20);
@@ -745,8 +755,6 @@ function drawScope(t){
     if(x<-60||x>W+60||y<-60||y>H+60){p._x=null;continue;}
     p._x=x;p._y=y;
     const isSel=state.sel===p.hex;
-    const isEm=EMERG[p.sqk];
-    if(isEm) emergMsg=EMERG[p.sqk];
     // trail (projected polyline)
     if(p.trail.length>1){
       ctx.beginPath();
@@ -947,6 +955,7 @@ function renderList(){
   }
 }
 function renderDiag(){
+  $("gVer").textContent=APP_VERSION;
   $("gMode").textContent=state.blocked?"SIM (feed offline)":(state.src==="live"?(viaProxy?"LIVE · proxy":"LIVE · airplanes.live"):"SIM");
   $("gMode").className=state.src==="live"&&!state.blocked?"ok":"";
   $("gCentre").textContent=state.lat.toFixed(3)+", "+state.lon.toFixed(3);

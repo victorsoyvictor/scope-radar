@@ -22,6 +22,8 @@ Endpoints:
 
 import json
 import os
+import re
+import subprocess
 import sys
 import threading
 import time
@@ -32,6 +34,27 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(os.environ.get("PORT", 8787))
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "web")
+
+
+def git_version() -> str:
+    """`git describe`, e.g. v1.2.3-4-g7595dd4, or the short hash with no tags.
+    "dev" if this isn't a git checkout (a plain download) or git isn't installed."""
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--tags", "--always", "--dirty"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=3,
+        )
+        v = out.stdout.strip()
+        return v if out.returncode == 0 and v else "dev"
+    except Exception:
+        return "dev"
+
+
+# Computed once at startup — accurate for the checkout the server is running
+# from. Re-run the server after pulling to pick up a new version.
+VERSION = git_version()
+_VERSION_RE = re.compile(rb'const APP_VERSION="[^"]*"')
 
 ADSB_FI = "https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{nm}"
 ADSBDB = "https://api.adsbdb.com/v0/callsign/{cs}"
@@ -115,7 +138,10 @@ class Handler(BaseHTTPRequestHandler):
             path = os.path.join(WEB_DIR, "radar.html")
             try:
                 with open(path, "rb") as f:
-                    self._send(200, f.read(), "text/html; charset=utf-8")
+                    body = f.read()
+                body = _VERSION_RE.sub(
+                    b'const APP_VERSION="' + VERSION.encode() + b'"', body)
+                self._send(200, body, "text/html; charset=utf-8")
             except FileNotFoundError:
                 self._error(404, "radar.html not found in web/")
             return
@@ -157,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"Scope proxy listening on http://localhost:{PORT}")
+    print(f"Scope proxy listening on http://localhost:{PORT}  (version {VERSION})")
     print("Data from adsb.fi and adsbdb. Personal, non-commercial use.")
     try:
         srv.serve_forever()

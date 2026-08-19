@@ -94,8 +94,21 @@ puts the page and adsb.fi on one origin to get around that.
 ```
 web/radar.html      the entire front end — one file, no build step
 proxy/serve.py      static server + CORS relay + rate limiter
+scripts/version.py  stamps `git describe` into radar.html for a static deploy
 docs/HARDWARE.md    the display board, what to buy, what to avoid
 ```
+
+## Version
+
+DIAG shows a build version from `git describe` — a tag if you've made one,
+otherwise the short commit hash (`+"-dirty"` for an uncommitted change). Two
+ways it gets there:
+
+- **Served by the proxy** (`python3 proxy/serve.py`) — stamped live from your
+  git checkout on every request. Always current; nothing to run.
+- **Served statically** (opened directly, GitHub Pages, a USB stick) — run
+  `python3 scripts/version.py` before you deploy and commit the result, or
+  DIAG just shows `dev`.
 
 ## Configuration
 
