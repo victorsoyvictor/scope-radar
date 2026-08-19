@@ -474,6 +474,15 @@ const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
 // proxy (proxy/serve.py) stamps it live from your git checkout on every request,
 // so a copy served that way never needs the script.
 const APP_VERSION="1.0";
+// CORS relay. The public ADS-B feeds answer a browser fine but send no
+// Access-Control-Allow-Origin header, so the browser fetches the bytes and then
+// refuses to hand them to the page ("CORS Missing Allow Origin" in DevTools).
+// A static host — GitHub Pages, a file:// copy — has no server of its own to get
+// around that, so requests go through a relay that re-serves them with the header.
+// Deploy proxy/worker.js to Cloudflare (2 min, free) and put your own URL here;
+// ?relay=<url> overrides it, and RELAY="" disables relaying entirely.
+// Tried last, so a working bundled proxy always wins before it.
+let RELAY="https://api.allorigins.win/raw?url=";
 
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
@@ -491,7 +500,8 @@ const state={
   routes:new Map(),          // callsign -> {from,to,fromN,toN,exp}
   sel:null, detail:false, showGround:false,   // grounded aircraft hidden by default
   auto:false, autoMs:10000, autoLast:0, autoPauseUntil:0,   // attract-mode cycling
-  fails:0, lastFetch:null, latency:null, payload:null, blocked:false, feed:null,
+  fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
+  feed:null, lastGood:null,       // which candidate served us last — retried first
   fps:0
 };
 
@@ -581,18 +591,36 @@ async function poll(){
   if(state.src!=="live"&&!state.blocked){ setTimeout(poll,5000); return; }
   const nm=Math.min(250,Math.ceil(state.range/KM_PER_NM*1.15));
   const lat=state.lat.toFixed(4), lon=state.lon.toFixed(4);
-  // Feeds are tried in order, first one that answers wins. The bundled proxy (when
-  // it's serving us) shares one rate-limited adsb.fi call across all tabs. The two
-  // public feeds both speak the ADSBExchange schema and send CORS headers, so they
-  // work straight from the browser — opening radar.html directly still shows real
-  // traffic, no backend. adsb.lol goes first: airplanes.live archived its public
-  // API repo in April 2026 and has been unreliable since. adsb.fi is deliberately
-  // not fetched directly — it sends no CORS header, so a browser could never read
-  // it cross-origin and it would only ever fall through to sim.
+  // Candidates are tried in order, first one that answers wins.
+  //   proxy   — the bundled Python server, when it's the one serving us. Same
+  //             origin, so no CORS involved at all, and it shares one
+  //             rate-limited adsb.fi call across every open tab.
+  //   direct  — straight at the feeds. Both speak the ADSBExchange schema, but
+  //             as of Aug 2026 neither sends Access-Control-Allow-Origin, so a
+  //             browser refuses to read the response even though it arrives.
+  //             Kept first anyway: it costs one request, needs no third party,
+  //             and starts working by itself the day a feed adds the header.
+  //   relay   — the same feeds through a CORS relay, which is what actually
+  //             works on static hosting today. See RELAY above.
+  const feeds=[
+    {name:"adsb.lol",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`},
+    {name:"airplanes.live",url:`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`},
+  ];
   const cands=[];
   if(viaProxy) cands.push({name:"proxy",url:`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`});
-  cands.push({name:"adsb.lol",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`});
-  cands.push({name:"airplanes.live",url:`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`});
+  for(const f of feeds) cands.push(f);
+  // Relay goes last, always: when the bundled proxy is really running it wins
+  // first and the relay is never reached, but "served from localhost" does not
+  // guarantee the proxy is up (a plain static server on :8000 looks identical),
+  // so there still has to be something behind it.
+  if(RELAY) for(const f of feeds)
+    cands.push({name:f.name+" via relay",url:RELAY+encodeURIComponent(f.url)});
+  // Whatever worked last time goes first, so the steady state is one request per
+  // poll instead of re-failing through the dead direct attempts every 5 s.
+  if(state.lastGood){
+    const i=cands.findIndex(c=>c.name===state.lastGood);
+    if(i>0) cands.unshift(cands.splice(i,1)[0]);
+  }
   const t0=performance.now();
   const errs=[];
   for(const c of cands){
@@ -609,7 +637,8 @@ async function poll(){
           x.classList.toggle("sel",x.dataset.src==="live"));
       }
       ingest(data.ac||[]);
-      state.fails=0; state.lastFetch="OK"; state.blocked=false; state.feed=c.name;
+      state.fails=0; state.lastFetch="OK"; state.blocked=false;
+      state.feed=c.name; state.lastGood=c.name;
       $("badge").className="badge live"; $("badge").textContent="LIVE";
       updateWarn(); setTimeout(poll,5000); return;
     }catch(e){                     // note which feed failed and why, then try the next
@@ -1069,6 +1098,8 @@ setInterval(()=>fetchWeather(false),120000);   // re-check; the cache gates real
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
 const params=new URLSearchParams(location.search);
 let savedTheme="night"; try{savedTheme=localStorage.getItem("scope.theme")||"night";}catch(e){}
+// ?relay=<url> points at your own CORS relay; ?relay= (empty) turns relaying off
+const urlRelay=params.get("relay"); if(urlRelay!=null) RELAY=urlRelay;
 const urlSkin=params.get("skin");                                 // ?skin=red to preset
 applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
 // auto-cycle: ?cycle=10 (seconds) wins, else the remembered setting
