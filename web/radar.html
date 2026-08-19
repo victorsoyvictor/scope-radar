@@ -572,7 +572,11 @@ $("useLoc").onclick=()=>{
 
 // ── live fetch (proxy → airplanes.live) ──────────────────────────────────────
 async function poll(){
-  if(state.src!=="live"){ setTimeout(poll,5000); return; }
+  // state.blocked means we fell back to sim automatically (feed was unreachable),
+  // as opposed to the user picking Simulated by hand — keep probing in the
+  // background in that case so it can recover on its own. A manual sim choice
+  // (blocked===false) is left alone: no network calls until the user acts.
+  if(state.src!=="live"&&!state.blocked){ setTimeout(poll,5000); return; }
   const nm=Math.min(250,Math.ceil(state.range/KM_PER_NM*1.15));
   const lat=state.lat.toFixed(4), lon=state.lon.toFixed(4);
   // Feeds are tried in order. The bundled proxy (when it's serving us) shares one
@@ -594,6 +598,11 @@ async function poll(){
       state.latency=Math.round(performance.now()-t0);
       state.payload=txt.length;
       const data=JSON.parse(txt);
+      if(state.src!=="live"){                 // was auto-simmed and the feed just came back
+        state.src="live"; state.planes.clear();
+        document.querySelectorAll("#srcSeg button").forEach(x=>
+          x.classList.toggle("sel",x.dataset.src==="live"));
+      }
       ingest(data.ac||[]);
       state.fails=0; state.lastFetch="OK"; state.blocked=false;
       $("badge").className="badge live"; $("badge").textContent="LIVE";
@@ -610,7 +619,7 @@ async function poll(){
       x.classList.toggle("sel",x.dataset.src==="sim"));
   }
   updateWarn();
-  setTimeout(poll,5000);
+  setTimeout(poll,state.blocked?15000:5000);   // slower retries while down, so we don't hammer a dead feed
 }
 // Rough physical-size class → icon scale (1 = narrowbody baseline). Uses the
 // ADS-B wake category (A1..A7 / C = surface) when present, else the type code.
