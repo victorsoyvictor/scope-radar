@@ -10,8 +10,10 @@
 // Deploy (about two minutes, no card needed):
 //   1. dash.cloudflare.com -> Workers & Pages -> Create -> Worker
 //   2. paste this file, Deploy
-//   3. put the resulting URL in RELAY near the top of web/radar.html, e.g.
-//      const RELAY="https://scope-relay.<you>.workers.dev/?url=";
+//   3. add the resulting URL to RELAYS near the top of web/radar.html, first in
+//      the list so it is preferred over the public relays behind it:
+//        {name:"worker", wrap:u=>"https://<you>.workers.dev/?url="+encodeURIComponent(u)},
+//      Or try it without editing anything: ?relay=https://<you>.workers.dev/?url=
 //
 // Or with wrangler:  npx wrangler deploy proxy/worker.js --name scope-relay
 //

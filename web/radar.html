@@ -480,12 +480,14 @@ const APP_VERSION="1.0";
 // A static host — GitHub Pages, a file:// copy — has no server of its own to get
 // around that, so requests go through a relay that re-serves them with the header.
 // Tried last, so a working bundled proxy always wins before them, and in the
-// order listed. These are shared public services: they rate-limit, they go down,
-// and every query passes through someone else's server — so more than one is
-// listed, and none of them is a good long-term answer. Deploy proxy/worker.js to
-// Cloudflare (2 min, free) and put your own in front, or pass ?relay=<url>;
+// order listed. First is our own deployment of proxy/worker.js — its quota and
+// its logs are ours, and it only relays an allowlist of feed hosts. The public
+// ones behind it are a fallback for when that is down: they rate-limit, they go
+// down, and every query (including the centre coordinates) passes through
+// someone else's server. ?relay=<url> replaces the whole list with one relay;
 // ?relay= (empty) turns relaying off and goes direct.
 let RELAYS=[
+  {name:"worker",     wrap:u=>"https://tight-haze-5ca6.victorsoyvictor.workers.dev/?url="+encodeURIComponent(u)},
   {name:"allorigins", wrap:u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u)},
   {name:"codetabs",   wrap:u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)},
 ];
