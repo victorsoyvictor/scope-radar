@@ -735,6 +735,8 @@ function drawScope(t){
 
   const now=Date.now(); let emergMsg=null, shown=0;
   for(const p of state.planes.values()){
+    const isEm=EMERG[p.sqk];
+    if(isEm) emergMsg=EMERG[p.sqk];   // always alert on emergency squawks, even hidden grounded ones
     if(p.onGround&&!state.showGround){p._x=null;continue;}   // grounded aircraft hidden by default
     shown++;
     const dtp=Math.min((now-p.recvAt)/1000,20);
@@ -745,8 +747,6 @@ function drawScope(t){
     if(x<-60||x>W+60||y<-60||y>H+60){p._x=null;continue;}
     p._x=x;p._y=y;
     const isSel=state.sel===p.hex;
-    const isEm=EMERG[p.sqk];
-    if(isEm) emergMsg=EMERG[p.sqk];
     // trail (projected polyline)
     if(p.trail.length>1){
       ctx.beginPath();
