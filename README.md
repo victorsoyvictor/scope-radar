@@ -97,23 +97,33 @@ That leaves a page with no server of its own two ways to read a feed:
   with the header attached. This is what makes a static deploy (GitHub Pages, a
   `file://` copy) work. `RELAYS` near the top of `web/radar.html` lists them.
 
-`RELAYS` ships with a couple of public relays so the page works unconfigured, but
-those are shared third parties: they rate-limit, they go down, and every query
-passes through someone else's server. Treat them as a stopgap.
-`proxy/worker.js` is a ~40-line Cloudflare Worker that does the same job on your
-own account — free tier, about two minutes to deploy, and it only relays an
-allowlist of feed hosts so it can't be abused as an open proxy. Put it at the
-front of `RELAYS`, or pass `?relay=<url>`; `?relay=` on its own turns relaying
-off and goes direct.
+`proxy/worker.js` is that relay: a ~40-line Cloudflare Worker, free tier, about
+two minutes to deploy, relaying only an allowlist of feed hosts so it can't be
+abused as an open proxy. It also caches for a few seconds and keeps serving the
+last good answer for up to two minutes when a feed starts refusing, which is
+what stops a rate-limited feed from dropping the scope into simulation.
 
-A relay answering `200` is not the same as a relay working: they will happily
-return their own `{"error": …}` as valid JSON. Every reply has to carry an `ac`
-array or it counts as a failure and the next candidate is tried, with the first
-40 characters of what came back shown in DIAG.
+> **Running your own copy?** `RELAYS` ships pointing at *this* project's Worker.
+> It will work, but it spends someone else's Cloudflare quota and sends them
+> every query — deploy `proxy/worker.js` on your own account and put your URL
+> there instead. `?relay=<url>` overrides it without editing anything, and
+> `?relay=` on its own turns relaying off and goes direct.
 
-Direct requests are still tried first on every poll, so the day a feed starts
-sending the header again the relay quietly stops being used. DIAG's **Mode** row
-names whichever path actually served the data, e.g. `LIVE · adsb.lol via relay`.
+Public "CORS proxy" services are a tempting shortcut and mostly a trap. Two were
+shipped here and both were removed: codetabs sends no `Access-Control-Allow-Origin`
+of its own, so it could never work from a browser, and allorigins spent most of
+its time returning a rate-limit error. Anything added to `RELAYS` should be
+checked against a real browser first — a relay answering `200` is not the same as
+a relay working, and they will happily return their own `{"error": …}` as valid
+JSON. Every reply has to carry an `ac` array or it counts as a failure, with the
+first 40 characters of what came back shown in DIAG.
+
+The feeds are still probed directly every ten minutes, so the day one starts
+sending the header the relay quietly stops being used — but not on every poll,
+because each doomed attempt logs a CORS error and buries real ones. Whichever
+candidate last worked is remembered in `localStorage` and tried first, so a
+return visit is a single request. DIAG's **Mode** row names the path that
+actually served the data, e.g. `LIVE · adsb.lol via worker`.
 
 `proxy/serve.py` also does two things worth having on their own:
 
