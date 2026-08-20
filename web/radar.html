@@ -479,17 +479,18 @@ const APP_VERSION="1.0";
 // refuses to hand them to the page ("CORS Missing Allow Origin" in DevTools).
 // A static host — GitHub Pages, a file:// copy — has no server of its own to get
 // around that, so requests go through a relay that re-serves them with the header.
-// Tried last, so a working bundled proxy always wins before them, and in the
-// order listed. First is our own deployment of proxy/worker.js — its quota and
-// its logs are ours, and it only relays an allowlist of feed hosts. The public
-// ones behind it are a fallback for when that is down: they rate-limit, they go
-// down, and every query (including the centre coordinates) passes through
-// someone else's server. ?relay=<url> replaces the whole list with one relay;
-// ?relay= (empty) turns relaying off and goes direct.
+// Tried last, so a working bundled proxy always wins before it. Just the one:
+// our own deployment of proxy/worker.js, where the quota and the logs are ours
+// and an allowlist limits it to the feed hosts. The public relays that used to
+// sit behind it as a "fallback" were nothing of the sort — codetabs sends no
+// Access-Control-Allow-Origin either, so it could never have worked from a
+// browser, and allorigins mostly answered with its own rate-limit error. Every
+// entry here costs one doomed request per feed per poll when it fails, which is
+// most of what made a cold load slow. Add another only after checking it really
+// returns the feed with CORS attached. ?relay=<url> swaps the list for one
+// relay; ?relay= (empty) turns relaying off and goes direct.
 let RELAYS=[
-  {name:"worker",     wrap:u=>"https://tight-haze-5ca6.victorsoyvictor.workers.dev/?url="+encodeURIComponent(u)},
-  {name:"allorigins", wrap:u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u)},
-  {name:"codetabs",   wrap:u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u)},
+  {name:"worker", wrap:u=>"https://tight-haze-5ca6.victorsoyvictor.workers.dev/?url="+encodeURIComponent(u)},
 ];
 
 // ── state ────────────────────────────────────────────────────────────────────
@@ -663,8 +664,12 @@ async function poll(){
       }
       ingest(data.ac||[]);
       state.fails=0; state.lastFetch="OK"; state.blocked=false;
-      state.feed=c.name; state.lastGood=c.name;
+      state.feed=c.name;
       if(c.direct) state.directNextTry=0;      // it works — stop rationing it
+      if(state.lastGood!==c.name){             // remember the winner across visits too
+        state.lastGood=c.name;
+        try{localStorage.setItem("scope.lastGood",c.name);}catch(e){}
+      }
       $("badge").className="badge live"; $("badge").textContent="LIVE";
       updateWarn(); setTimeout(poll,5000); return;
     }catch(e){                     // note which feed failed and why, then try the next
@@ -1125,6 +1130,12 @@ setInterval(()=>fetchWeather(false),120000);   // re-check; the cache gates real
 $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
 const params=new URLSearchParams(location.search);
 let savedTheme="night"; try{savedTheme=localStorage.getItem("scope.theme")||"night";}catch(e){}
+// A cold load has no idea which of the candidates works, so it walks the list
+// from the top — including the direct attempts that cannot succeed while the
+// feeds send no CORS header. Remembering last visit's winner makes the first
+// poll a single request instead of a march through the doomed ones. A stale
+// value costs nothing: it is only a reordering, and a miss falls through.
+try{state.lastGood=localStorage.getItem("scope.lastGood")||null;}catch(e){}
 // ?relay=<url> points at your own CORS relay; ?relay= (empty) turns relaying off
 const urlRelay=params.get("relay");
 if(urlRelay!=null) RELAYS=urlRelay
