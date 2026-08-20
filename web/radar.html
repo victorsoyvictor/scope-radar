@@ -162,6 +162,10 @@
     padding:12px;color:var(--accent);font-family:var(--mono);font-size:13px;
     font-weight:700;cursor:pointer;letter-spacing:.08em;margin-top:4px}
   .btn:active{background:#143246}
+  .locmsg{font-family:var(--mono);font-size:11px;line-height:1.5;margin-top:8px;
+    color:var(--ink-dim)}
+  .locmsg.ok{color:var(--ok)} .locmsg.bad{color:var(--warn)}
+  .btn:disabled{opacity:.6;cursor:default}
   .note{font-family:var(--mono);font-size:10px;color:var(--ink-faint);
     line-height:1.6;margin-top:14px}
   .note a{color:var(--ink-dim)}
@@ -299,6 +303,7 @@
       <div class="field"><label>Centre longitude</label><input id="inLon" inputmode="decimal"></div>
       <button class="btn" id="applyCentre">APPLY CENTRE</button>
       <button class="btn" id="useLoc" style="margin-top:8px;background:#0d1a24;color:var(--ink-dim);border-color:#16283a">USE MY LOCATION</button>
+      <div id="locMsg" class="locmsg"></div>
       <div class="field" style="margin-top:18px"><label>Default range (km)</label>
         <div class="seg" id="rangeSeg"></div></div>
       <div class="note">Live data from community ADS-B networks —
@@ -584,13 +589,51 @@ $("applyCentre").onclick=()=>{
   if(isFinite(la)&&isFinite(lo)){state.lat=la;state.lon=lo;state.planes.clear();
     if(state.src==="sim")seedSim(); fetchWeather(true);}
 };
+// Geolocation fails silently more often than it succeeds — permission denied,
+// no fix indoors, a device that simply never answers — and it can take several
+// seconds when it does work. Reporting none of that is what makes the button
+// look broken: you press it and nothing whatsoever happens. Every outcome here
+// says something, and the wait is visible while it lasts.
 $("useLoc").onclick=()=>{
-  if(!navigator.geolocation)return;
+  const btn=$("useLoc"), msg=$("locMsg");
+  const say=(t,cls)=>{ msg.textContent=t; msg.className="locmsg"+(cls?" "+cls:""); };
+  if(!window.isSecureContext){        // the API exists on http:// but never resolves
+    say("Locating needs a secure connection — open this page over https.","bad"); return;
+  }
+  if(!navigator.geolocation){ say("This browser has no location support.","bad"); return; }
+  if(btn.disabled) return;            // a second press would queue another lookup
+  const label=btn.textContent;
+  btn.disabled=true; btn.textContent="LOCATING…";
+  say("Waiting for the browser's location permission…");
+  const done=()=>{ btn.disabled=false; btn.textContent=label; };
+  // The API's own `timeout` only starts once permission has been granted — time
+  // spent with the prompt sitting unanswered does not count towards it. Ignore
+  // the prompt and neither callback ever runs, so without a watchdog of our own
+  // the button stays stuck on LOCATING… forever. A late success is still worth
+  // honouring if the answer finally comes; a late error is not, since the
+  // reader has already been told what to do.
+  let expired=false;
+  const watchdog=setTimeout(()=>{
+    expired=true; done();
+    say("No answer from the browser. If a permission prompt is waiting, answer it "+
+        "and press again — otherwise type the coordinates above.","bad");
+  },15000);
   navigator.geolocation.getCurrentPosition(p=>{
-    state.lat=p.coords.latitude;state.lon=p.coords.longitude;
-    $("inLat").value=state.lat.toFixed(4);$("inLon").value=state.lon.toFixed(4);
+    clearTimeout(watchdog); done();
+    state.lat=p.coords.latitude; state.lon=p.coords.longitude;
+    $("inLat").value=state.lat.toFixed(4); $("inLon").value=state.lon.toFixed(4);
     state.planes.clear(); if(state.src==="sim")seedSim(); fetchWeather(true);
-  },()=>{});
+    say("Centred on "+state.lat.toFixed(3)+", "+state.lon.toFixed(3)+
+        " (±"+Math.round(p.coords.accuracy)+" m). Open RADAR to see it.","ok");
+  },err=>{
+    clearTimeout(watchdog); done();
+    if(expired) return;               // already explained; don't overwrite it
+    const c=err&&err.code;            // 1 denied · 2 no fix · 3 timed out
+    say(c===1?"Permission denied. Allow location for this site — the control is in the address bar — then press again."
+       :c===2?"Your device could not get a fix. Indoors this is common; type the coordinates above instead."
+       :c===3?"Timed out waiting for a fix. Press again, or type the coordinates above."
+       :"Location failed. Type the coordinates above instead.","bad");
+  },{enableHighAccuracy:false,timeout:10000,maximumAge:60000});
 };
 
 // ── live fetch (proxy → adsb.lol → airplanes.live) ───────────────────────────
