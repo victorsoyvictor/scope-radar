@@ -689,7 +689,18 @@ async function poll(){
   for(const c of cands){
     try{
       const res=await fetch(c.url,{headers:{Accept:"application/json"}});
-      if(!res.ok) throw new Error("HTTP "+res.status);
+      if(!res.ok){
+        // A relay answers with its own status and puts the real reason in the
+        // body — ours says {"error":"upstream 429"} when a feed refused it.
+        // Throwing on the status alone reports "HTTP 502" and loses exactly the
+        // detail worth having: whether a feed rate-limited us, refused us, or
+        // was unreachable.
+        // An HTML error page carries nothing useful and would fill the row with
+        // markup, so only a short text or JSON body is worth quoting.
+        let why=""; try{ const t=(await res.text()).trim();
+          if(t && t[0]!=="<") why=t.slice(0,60).replace(/\s+/g," "); }catch(e){}
+        throw new Error("HTTP "+res.status+(why?" "+why:""));
+      }
       const txt=await res.text();
       state.latency=Math.round(performance.now()-t0);
       state.payload=txt.length;
@@ -717,7 +728,7 @@ async function poll(){
       updateWarn(); setTimeout(poll,5000); return;
     }catch(e){                     // note which feed failed and why, then try the next
       if(c.direct) state.directNextTry=Date.now()+DIRECT_RETRY_MS;
-      errs.push(c.name+": "+String((e&&e.message)||e||"fetch").slice(0,28));
+      errs.push(c.name+": "+String((e&&e.message)||e||"fetch").slice(0,52));
     }
   }
   // every candidate failed (offline, or all feeds unreachable)
