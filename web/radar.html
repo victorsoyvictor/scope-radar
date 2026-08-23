@@ -481,35 +481,50 @@ const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
 // proxy (proxy/serve.py) stamps it live from your git checkout on every request,
 // so a copy served that way never needs the script.
 const APP_VERSION="1.0";
+// Rewritten to true by proxy/serve.py as it serves this file, the same way it
+// stamps APP_VERSION above. It is the only reliable way to know the bundled
+// proxy is the one answering: the hostname check below can only recognise
+// localhost and private LAN ranges, so a proxy deployed to a public host (a
+// free cloud VM, say) would serve /api/ac and then watch the page ignore it.
+const SERVED_BY_PROXY=false;
 // CORS relay. The public ADS-B feeds answer a browser fine but send no
 // Access-Control-Allow-Origin header, so the browser fetches the bytes and then
 // refuses to hand them to the page ("CORS Missing Allow Origin" in DevTools).
 // A static host — GitHub Pages, a file:// copy — has no server of its own to get
 // around that, so requests go through a relay that re-serves them with the header.
 // Tried last, so a working bundled proxy always wins before it. Just the one:
-// our own deployment of proxy/worker.js, where the quota and the logs are ours
-// and an allowlist limits it to the feed hosts. The public relays that used to
-// sit behind it as a "fallback" were nothing of the sort — codetabs sends no
-// Access-Control-Allow-Origin either, so it could never have worked from a
-// browser, and allorigins mostly answered with its own rate-limit error. Every
-// entry here costs one doomed request per feed per poll when it fails, which is
-// most of what made a cold load slow. Add another only after checking it really
-// returns the feed with CORS attached. ?relay=<url> swaps the list for one
-// relay; ?relay= (empty) turns relaying off and goes direct.
+// our own deployment of proxy/relay.py, where the quota and the logs are ours
+// and an allowlist limits it to the feed hosts.
+// It used to be the Cloudflare Worker in proxy/worker.js, and that code is still
+// fine — what broke is where it ran. In Aug 2026 both feeds started refusing
+// Workers' shared free-tier egress IPs (adsb.lol 429, adsb.fi 403), persistently
+// and regardless of headers, because that address pool is shared with everyone
+// on the free tier. Verified from AWS: the same requests answer 200. So the same
+// relay now runs as a Lambda behind an API Gateway HTTP API instead.
+// The public relays that used to sit behind it as a "fallback" were nothing of
+// the sort — codetabs sends no Access-Control-Allow-Origin either, so it could
+// never have worked from a browser, and allorigins mostly answered with its own
+// rate-limit error. Every entry here costs one doomed request per feed per poll
+// when it fails, which is most of what made a cold load slow. Add another only
+// after checking it really returns the feed with CORS attached. ?relay=<url>
+// swaps the list for one relay; ?relay= (empty) turns relaying off and goes direct.
 let RELAYS=[
-  {name:"worker", wrap:u=>"https://tight-haze-5ca6.victorsoyvictor.workers.dev/?url="+encodeURIComponent(u)},
+  {name:"lambda", wrap:u=>"https://kbuy94xds7.execute-api.us-west-2.amazonaws.com/?url="+encodeURIComponent(u)},
 ];
 
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
 const DIRECT_RETRY_MS=600000;   // how often to re-probe the feeds without a relay
-// Use the same-origin proxy only when we're actually served by it — i.e. on
-// localhost or a private-LAN address. On a public host (e.g. GitHub Pages) there
-// is no proxy to ask, so the relay below is what stands between us and the feeds.
+// Use the same-origin proxy only when we're actually served by it. The stamp
+// above settles it outright when the bundled proxy served this file, wherever it
+// runs; the hostname check is the fallback for a copy opened another way, and
+// still catches the common case of a static server on localhost. On a plain
+// static host (e.g. GitHub Pages) neither fires and the relay below is what
+// stands between us and the feeds.
 const _h=location.hostname;
 const _localish=_h==="localhost"||_h==="127.0.0.1"||_h==="[::1]"||
   /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(_h);
-const viaProxy=location.protocol.startsWith("http")&&_localish;
+const viaProxy=SERVED_BY_PROXY||(location.protocol.startsWith("http")&&_localish);
 const EMERG={ "7500":"7500 · UNLAWFUL INTERFERENCE","7600":"7600 · RADIO FAILURE","7700":"7700 · GENERAL EMERGENCY" };
 const state={
   src:"live", theme:"night", lat:-37.6733, lon:144.8433, range:50,     // Melbourne Airport
