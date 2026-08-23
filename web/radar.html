@@ -306,11 +306,13 @@
       <div id="locMsg" class="locmsg"></div>
       <div class="field" style="margin-top:18px"><label>Default range (km)</label>
         <div class="seg" id="rangeSeg"></div></div>
-      <div class="note">Live data from community ADS-B networks —
-        <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a>
-        directly, or <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a>
-        via the bundled proxy. Personal, non-commercial use. Routes from adsbdb.
-        If no feed is reachable the scope falls back to simulation and DIAG shows the error.</div>
+      <div class="note">Live traffic from community ADS-B networks —
+        <a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a>, with
+        <a href="https://adsb.fi" target="_blank" rel="noopener">adsb.fi</a> behind it.
+        Both are run by volunteers sharing what their own receivers pick up, and both
+        ask to be credited: personal, non-commercial use only. Routes from
+        <a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a>.
+        If no feed is reachable the scope falls back to simulation and DIAG says why.</div>
     </div>
 
     <!-- DIAG -->
@@ -503,7 +505,7 @@ const RANGES=[5,10,25,50,100,250];
 const DIRECT_RETRY_MS=600000;   // how often to re-probe the feeds without a relay
 // Use the same-origin proxy only when we're actually served by it — i.e. on
 // localhost or a private-LAN address. On a public host (e.g. GitHub Pages) there
-// is no proxy, so we skip it and fetch airplanes.live directly (it sends CORS).
+// is no proxy to ask, so the relay below is what stands between us and the feeds.
 const _h=location.hostname;
 const _localish=_h==="localhost"||_h==="127.0.0.1"||_h==="[::1]"||
   /^(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(_h);
@@ -636,7 +638,7 @@ $("useLoc").onclick=()=>{
   },{enableHighAccuracy:false,timeout:10000,maximumAge:60000});
 };
 
-// ── live fetch (proxy → adsb.lol → airplanes.live) ───────────────────────────
+// ── live fetch (proxy → adsb.lol → adsb.fi, direct then via relay) ───────────
 async function poll(){
   // state.blocked means we fell back to sim automatically (feed was unreachable),
   // as opposed to the user picking Simulated by hand — keep probing in the
