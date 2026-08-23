@@ -503,6 +503,11 @@ let RELAYS=[
 // ── state ────────────────────────────────────────────────────────────────────
 const RANGES=[5,10,25,50,100,250];
 const DIRECT_RETRY_MS=600000;   // how often to re-probe the feeds without a relay
+// A feed answering 401/403/420/429 is telling us to stop, not to try again — and
+// adsb.fi's terms say failed requests count towards the limit and can extend the
+// restriction, so retrying every 15 s digs the hole deeper. Each refusal parks
+// that feed for twice as long as the last, up to half an hour.
+const COOL_BASE_MS=60000, COOL_MAX_MS=1800000;
 // Use the same-origin proxy only when we're actually served by it — i.e. on
 // localhost or a private-LAN address. On a public host (e.g. GitHub Pages) there
 // is no proxy to ask, so the relay below is what stands between us and the feeds.
@@ -520,6 +525,7 @@ const state={
   fails:0, lastFetch:null, latency:null, payload:null, blocked:false,
   feed:null, lastGood:null,       // which candidate served us last — retried first
   directNextTry:0,                // re-probe the CORS-less direct feeds after this
+  cool:new Map(),                 // feed name -> {until, strikes} while it refuses us
   fps:0
 };
 
@@ -675,23 +681,38 @@ async function poll(){
   const relayFeeds=[...feeds,
     {name:"adsb.fi",url:`https://opendata.adsb.fi/api/v3/lat/${lat}/lon/${lon}/dist/${nm}`}];
   const cands=[];
-  if(viaProxy) cands.push({name:"proxy",url:`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`});
+  if(viaProxy) cands.push({name:"proxy",feed:"proxy",url:`/api/ac?lat=${lat}&lon=${lon}&nm=${nm}`});
   if(Date.now()>=state.directNextTry)
-    for(const f of feeds) cands.push({...f,direct:true});
+    for(const f of feeds) cands.push({...f,feed:f.name,direct:true});
   // Relay goes last, always: when the bundled proxy is really running it wins
   // first and the relay is never reached, but "served from localhost" does not
   // guarantee the proxy is up (a plain static server on :8000 looks identical),
   // so there still has to be something behind it.
   for(const r of RELAYS) for(const f of relayFeeds)
-    cands.push({name:f.name+" via "+r.name,url:r.wrap(f.url)});
+    cands.push({name:f.name+" via "+r.name,feed:f.name,url:r.wrap(f.url)});
+  // Drop whatever is still cooling off. Keyed by the feed, not the route: going
+  // at a refusing feed through a different relay is the same feed, still refusing.
+  const now0=Date.now();
+  for(let i=cands.length-1;i>=0;i--){
+    const k=state.cool.get(cands[i].feed);
+    if(k&&now0<k.until) cands.splice(i,1);
+  }
   // Whatever worked last time goes first, so the steady state is one request per
   // poll instead of re-failing through the dead direct attempts every 5 s.
   if(state.lastGood){
     const i=cands.findIndex(c=>c.name===state.lastGood);
     if(i>0) cands.unshift(cands.splice(i,1)[0]);
   }
+  const soonestCool=()=>{
+    const t=[...state.cool.values()].map(c=>c.until).filter(u=>u>Date.now());
+    return t.length?Math.min(...t):Date.now()+COOL_BASE_MS;
+  };
   const t0=performance.now();
   const errs=[];
+  // Nothing left to ask: say so rather than reporting an error we never made.
+  if(!cands.length)
+    errs.push("every feed is refusing us — next attempt at "+
+              new Date(soonestCool()).toTimeString().slice(0,8));
   for(const c of cands){
     try{
       const res=await fetch(c.url,{headers:{Accept:"application/json"}});
@@ -705,7 +726,11 @@ async function poll(){
         // markup, so only a short text or JSON body is worth quoting.
         let why=""; try{ const t=(await res.text()).trim();
           if(t && t[0]!=="<") why=t.slice(0,60).replace(/\s+/g," "); }catch(e){}
-        throw new Error("HTTP "+res.status+(why?" "+why:""));
+        const err=new Error("HTTP "+res.status+(why?" "+why:""));
+        // A relay wraps the feed's status inside its own, so look in both the
+        // status and the quoted body for the codes that mean "stop asking".
+        err.refused=/\b(401|403|420|429)\b/.test(res.status+" "+why);
+        throw err;
       }
       const txt=await res.text();
       state.latency=Math.round(performance.now()-t0);
@@ -725,6 +750,7 @@ async function poll(){
       ingest(data.ac||[]);
       state.fails=0; state.lastFetch="OK"; state.blocked=false;
       state.feed=c.name;
+      state.cool.delete(c.feed);               // answering again — wipe its strikes
       if(c.direct) state.directNextTry=0;      // it works — stop rationing it
       if(state.lastGood!==c.name){             // remember the winner across visits too
         state.lastGood=c.name;
@@ -734,6 +760,12 @@ async function poll(){
       updateWarn(); setTimeout(poll,5000); return;
     }catch(e){                     // note which feed failed and why, then try the next
       if(c.direct) state.directNextTry=Date.now()+DIRECT_RETRY_MS;
+      if(e&&e.refused&&c.feed){
+        const k=state.cool.get(c.feed)||{strikes:0};
+        k.strikes++;
+        k.until=Date.now()+Math.min(COOL_MAX_MS,COOL_BASE_MS*2**(k.strikes-1));
+        state.cool.set(c.feed,k);
+      }
       errs.push(c.name+": "+String((e&&e.message)||e||"fetch").slice(0,52));
     }
   }
@@ -747,7 +779,10 @@ async function poll(){
       x.classList.toggle("sel",x.dataset.src==="sim"));
   }
   updateWarn();
-  setTimeout(poll,state.blocked?15000:5000);   // slower retries while down, so we don't hammer a dead feed
+  // While something is still worth asking, retry slowly; when everything is
+  // cooling off, sleep until the first one is due rather than counting down at it.
+  setTimeout(poll, cands.length ? (state.blocked?15000:5000)
+    : Math.max(5000,Math.min(60000,soonestCool()-Date.now()+500)));
 }
 // Rough physical-size class → icon scale (1 = narrowbody baseline). Uses the
 // ADS-B wake category (A1..A7 / C = surface) when present, else the type code.
