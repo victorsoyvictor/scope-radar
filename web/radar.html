@@ -658,9 +658,13 @@ async function poll(){
   //             error and the console is where real problems have to be visible.
   //   relay   — the same feeds through a CORS relay, which is what actually
   //             works on static hosting today. See RELAYS above.
+  // airplanes.live used to be here and is deliberately gone: in 2026 it closed
+  // its API to anyone not feeding it data, answering non-feeders with a 403 (and
+  // a misleading "API Key invalid" to some clients). No amount of retrying gets
+  // past that, so every attempt was a request spent on a guaranteed refusal.
+  // Worth restoring only if this ever feeds them — see docs/HARDWARE.md.
   const feeds=[
     {name:"adsb.lol",url:`https://api.adsb.lol/v2/point/${lat}/${lon}/${nm}`},
-    {name:"airplanes.live",url:`https://api.airplanes.live/v2/point/${lat}/${lon}/${nm}`},
   ];
   // adsb.fi sends no CORS header at all, so it is worthless directly — but behind
   // a relay that is irrelevant, and it is a feed neither of the others can

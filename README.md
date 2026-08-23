@@ -19,9 +19,8 @@ open web/radar.html      # or double-click it
 ```
 
 Opened directly, the page pulls live traffic from
-[adsb.lol](https://adsb.lol), falling back to
-[airplanes.live](https://airplanes.live) — through a CORS relay, because neither
-feed lets a browser read it directly any more. See
+[adsb.lol](https://adsb.lol), with [adsb.fi](https://adsb.fi) behind it — through
+a CORS relay, because no feed lets a browser read it directly any more. See
 [Feeds, CORS and the relay](#feeds-cors-and-the-relay); it works out of the box,
 but the relay is worth pointing at your own once you care.
 
@@ -43,9 +42,9 @@ and only falls back to the public feeds if it's unreachable.
   geographic positions. Free, no API key, and it sends CORS headers so it loads
   straight from the browser.
 - **Live traffic** polled every 5 seconds, from the first feed that answers:
-  [adsb.lol](https://adsb.lol), then [airplanes.live](https://airplanes.live) —
-  or [adsb.fi](https://adsb.fi) through the proxy. DIAG names the feed in use,
-  and lists the per-feed error when none of them answer.
+  [adsb.lol](https://adsb.lol), then [adsb.fi](https://adsb.fi) through the relay
+  or the proxy. DIAG names the feed in use, and lists the per-feed reason when
+  none of them answer.
 - **Dead reckoning** between polls. Each aircraft is projected along its last
   reported track at its last reported ground speed, so motion stays smooth on a
   slow poll. The projection is capped at 20 seconds — an aircraft that stops
@@ -188,12 +187,13 @@ London-Heathrow wall in the neon skin, cycling every 10 s:
 
 ## Data sources and terms
 
-- Aircraft positions, all free and keyless, all **personal and non-commercial use
-  only**: [adsb.lol](https://adsb.lol) and [airplanes.live](https://airplanes.live)
-  straight from the browser, [adsb.fi](https://adsb.fi) through the proxy (one
-  request per second, and they ask that you credit them). All three are
-  community-run; if you find this useful, consider running a receiver and feeding
-  back.
+- Aircraft positions, free and keyless, **personal and non-commercial use only**:
+  [adsb.lol](https://adsb.lol) and [adsb.fi](https://adsb.fi) (one request per
+  second, and they ask that you credit them). Both are community-run.
+  [airplanes.live](https://airplanes.live) was a third until 2026, when it closed
+  its API to non-feeders — a reminder that this data exists only because people
+  run receivers. If you find this useful, consider becoming one of them;
+  [docs/HARDWARE.md](docs/HARDWARE.md) is a place to start.
 - Routes: [adsbdb](https://www.adsbdb.com).
 
 Aircraft are only visible here because volunteers run receivers and share what
