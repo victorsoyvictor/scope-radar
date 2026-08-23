@@ -96,15 +96,23 @@ That leaves a page with no server of its own two ways to read a feed:
   with the header attached. This is what makes a static deploy (GitHub Pages, a
   `file://` copy) work. `RELAYS` near the top of `web/radar.html` lists them.
 
-`proxy/worker.js` is that relay: a ~40-line Cloudflare Worker, free tier, about
-two minutes to deploy, relaying only an allowlist of feed hosts so it can't be
-abused as an open proxy. It also caches for a few seconds and keeps serving the
-last good answer for up to two minutes when a feed starts refusing, which is
-what stops a rate-limited feed from dropping the scope into simulation.
+`proxy/relay.py` is that relay: an AWS Lambda behind an API Gateway HTTP API,
+relaying only an allowlist of feed hosts so it can't be abused as an open proxy.
+It caches for a few seconds and keeps serving the last good answer for up to two
+minutes when a feed starts refusing, which is what stops a rate-limited feed from
+dropping the scope into simulation. Deploy instructions are in the file header.
 
-> **Running your own copy?** `RELAYS` ships pointing at *this* project's Worker.
-> It will work, but it spends someone else's Cloudflare quota and sends them
-> every query — deploy `proxy/worker.js` on your own account and put your URL
+`proxy/worker.js` is the same relay as a Cloudflare Worker, and it is kept only
+for reference. **Do not deploy it.** The code is fine; where it runs is not. In
+August 2026 both feeds began refusing Workers' shared free-tier egress addresses
+— adsb.lol with `429`, adsb.fi with `403` — persistently, and regardless of
+User-Agent, because that address pool is shared with every free Worker on the
+platform. The same requests answer `200` from AWS, which is why the relay moved.
+A residential address answers `200` too, so this is not a datacenter block.
+
+> **Running your own copy?** `RELAYS` ships pointing at *this* project's relay.
+> It will work, but it spends someone else's AWS quota and sends them every
+> query — deploy `proxy/relay.py` on your own account and put your endpoint
 > there instead. `?relay=<url>` overrides it without editing anything, and
 > `?relay=` on its own turns relaying off and goes direct.
 
@@ -122,7 +130,7 @@ sending the header the relay quietly stops being used — but not on every poll,
 because each doomed attempt logs a CORS error and buries real ones. Whichever
 candidate last worked is remembered in `localStorage` and tried first, so a
 return visit is a single request. DIAG's **Mode** row names the path that
-actually served the data, e.g. `LIVE · adsb.lol via worker`.
+actually served the data, e.g. `LIVE · adsb.lol via lambda`.
 
 `proxy/serve.py` also does two things worth having on their own:
 
@@ -131,14 +139,23 @@ actually served the data, e.g. `LIVE · adsb.lol via worker`.
   call per second rather than ten.
 - **Caching.** Aircraft responses are cached for 4 seconds, found routes for
   2 hours, and unknown callsigns for 30 minutes.
+- **A health endpoint.** `curl localhost:8787/health` (also `/api/health`) is the
+  server-side counterpart of the DIAG tab: which upstream answered last and how
+  fast, what the caches hold, how many requests came in. `ok` is false when an
+  upstream's most recent attempt failed, so `curl -s localhost:8787/health | jq
+  .upstreams` is the quickest way to tell a dead feed from a dead proxy. It only
+  reports what past traffic recorded and never calls a feed itself, so polling it
+  costs nothing against the rate limit.
 
 ## Layout
 
 ```
 web/radar.html      the entire front end — one file, no build step
 proxy/serve.py      static server + CORS relay + rate limiter (run it locally)
-proxy/worker.js     the same CORS relay as a Cloudflare Worker (for static hosts)
+proxy/relay.py      the CORS relay as an AWS Lambda (what static hosts use)
+proxy/worker.js     the same relay as a Cloudflare Worker — reference only, see above
 scripts/version.py  stamps `git describe` into radar.html for a static deploy
+docs/ARCHITECTURE.md why the data plumbing looks like this, and how to debug it
 docs/HARDWARE.md    the display board, what to buy, what to avoid
 ```
 
