@@ -377,7 +377,13 @@ function mercXY(lat,lon,z){                  // geo -> world-pixel at integer zo
   return {x:(lon+180)/360*s, y:(0.5-Math.log((1+sy)/(1-sy))/(4*Math.PI))*s};
 }
 const tileCache=new Map();                   // "style/z/x/y" -> Image
-const tileURL=(style,z,x,y,hi)=>`https://${"abcd"[(x+y)&3]}.basemaps.cartocdn.com/${style}/${z}/${x}/${y}${hi?"@2x":""}.png`
+// One host, not the old a./b./c./d. shards. Spreading tiles over four
+// subdomains was a way around HTTP/1.1's six-connections-per-host limit; over
+// HTTP/2, which this CDN speaks, every tile multiplexes on one connection and
+// the shards only add DNS lookups and TLS handshakes. It is also the exact URL
+// CARTO hands out with a key, so there is no question of whether the shards
+// honour one.
+const tileURL=(style,z,x,y,hi)=>`https://basemaps.cartocdn.com/${style}/${z}/${x}/${y}${hi?"@2x":""}.png`
   +(MAP_KEY?`?key=${encodeURIComponent(MAP_KEY)}`:"");
 function getTile(style,z,x,y,hi){
   const k=style+"/"+z+"/"+x+"/"+y; let img=tileCache.get(k);
@@ -485,9 +491,11 @@ const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
 // https://carto.com/basemaps/apikey (free tier is 5M tile requests a month for
 // non-commercial use). It is a public browser key by nature — it ships in this
 // file in plain sight, the way every web map key does — so leave it scoped to
-// basemaps and nothing else. ?mapkey=<key> sets it from the URL and remembers
-// it, which fixes a deployed copy without a redeploy; ?mapkey= forgets it.
-let MAP_KEY="";
+// basemaps and nothing else. ?mapkey=<key> overrides it for one browser and
+// remembers the override, which fixes a deployed copy without a redeploy;
+// ?mapkey= drops the override and goes back to the key below.
+let MAP_KEY="cb1_5820_1_ecc1fcc86bf940b08d886f50";
+const MAP_KEY_SHIPPED=MAP_KEY;   // what ?mapkey= reverts to
 // Build version, shown in DIAG. "dev" means an unstamped copy — opened straight
 // from a working tree. `python3 scripts/version.py` bakes `git describe` into a
 // static copy before you deploy it (GitHub Pages, a USB stick…); the bundled
@@ -1268,10 +1276,11 @@ if(urlRelay!=null) RELAYS=urlRelay
 try{ MAP_KEY=localStorage.getItem("scope.mapKey")||MAP_KEY; }catch(e){}
 const urlMapKey=params.get("mapkey");
 if(urlMapKey!=null){
-  MAP_KEY=urlMapKey.trim();
-  try{ MAP_KEY?localStorage.setItem("scope.mapKey",MAP_KEY)
-             :localStorage.removeItem("scope.mapKey"); }catch(e){}
-  tileCache.clear();          // drop any watermarked tiles already fetched
+  const k=urlMapKey.trim();
+  MAP_KEY=k||MAP_KEY_SHIPPED;   // empty means "forget mine", not "use none"
+  try{ k?localStorage.setItem("scope.mapKey",k)
+        :localStorage.removeItem("scope.mapKey"); }catch(e){}
+  tileCache.clear();            // drop any watermarked tiles already fetched
 }
 const urlSkin=params.get("skin");                                 // ?skin=red to preset
 applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
