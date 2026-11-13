@@ -39,8 +39,9 @@ and only falls back to the public feeds if it's unreachable.
 
 - **Map underlay** — a [CARTO](https://carto.com/attributions) dark basemap
   (OpenStreetMap data) is drawn behind the scope and aircraft sit on their true
-  geographic positions. Free, no API key, and it sends CORS headers so it loads
-  straight from the browser.
+  geographic positions. It sends CORS headers, so it loads straight from the
+  browser — but since September 2026 it needs a free key, see
+  [The basemap key](#the-basemap-key).
 - **Live traffic** polled every 5 seconds, from the first feed that answers:
   [adsb.lol](https://adsb.lol), then [adsb.fi](https://adsb.fi) through the relay
   or the proxy. DIAG names the feed in use, and lists the per-feed reason when
@@ -77,6 +78,32 @@ and only falls back to the public feeds if it's unreachable.
 - **Simulated mode** so the scope still shows something when the feed is
   unreachable or the sky is empty. The badge in the header always says which
   mode you're in: `LIVE`, `SIM`, or `NO FEED`.
+
+## The basemap key
+
+In late September 2026 CARTO started requiring an API key for its raster
+basemaps. Without one the tiles still load, but every one of them arrives stamped
+`API KEY REQUIRED · carto.com/basemaps/apikey` and the map underneath the scope
+is unreadable. Nothing else is affected — the scope, the aircraft and the feeds
+do not care — so a keyless copy still works, it just looks broken.
+
+The key is free and does not need a CARTO account. Ask for one at
+[carto.com/basemaps/apikey](https://carto.com/basemaps/apikey); the free tier is
+5 million tile requests a month for non-commercial use, which this page will not
+come close to. Then either:
+
+- put it in `MAP_KEY` near the top of `web/radar.html` and deploy, or
+- visit the page once with `?mapkey=<key>` — it is saved in `localStorage`, so
+  that browser keeps using it with no redeploy. `?mapkey=` on its own forgets it.
+
+It is a public key either way: it ships in the page's source, the way every web
+map key does. Keep it scoped to basemaps. After adding it, force-refresh — the
+browser will happily keep serving the watermarked tiles it already cached.
+
+If you would rather not have a key at all, the tile URL is built in one place —
+`tileURL` in `web/radar.html` — and any XYZ raster source that sends CORS headers
+can go there instead. Check it in a real browser before you commit to it; the
+themes expect a dark basemap, and `TH.map` carries the per-skin style name.
 
 ## Feeds, CORS and the relay
 
@@ -194,6 +221,7 @@ keyboard. All are optional and combine with `&`:
 | `range`   | km (snaps to 5/10/25/50/100/250) | initial range |
 | `src`     | `live` · `sim` | data source |
 | `relay`   | a CORS relay URL ending in `?url=`; empty = go direct | replaces `RELAYS` |
+| `mapkey`  | a CARTO basemap key; empty = forget the stored one | sets `MAP_KEY`, remembered |
 
 A URL value overrides the remembered setting and is then saved. Example — a
 London-Heathrow wall in the neon skin, cycling every 10 s:
