@@ -367,8 +367,9 @@ const dest=(lat,lon,bDeg,dKm)=>{const d=dKm/R_EARTH,b=bDeg*D2R,
   return {lat:φ2*R2D,lon:((λ2*R2D+540)%360)-180};};
 
 // ── web-mercator + map tiles ─────────────────────────────────────────────────
-// The scope is drawn over a slippy-map underlay (CARTO dark basemap — free, no
-// key, and it sends CORS headers). Everything is projected the same way so the
+// The scope is drawn over a slippy-map underlay (CARTO dark basemap — free, and
+// it sends CORS headers, so it loads straight from the browser; it does need a
+// free key now, see MAP_KEY below). Everything is projected the same way so the
 // aircraft sit on their true geographic positions, not just a bearing/range plot.
 const TILE=256, MPP0=156543.03392;          // metres/pixel at the equator, zoom 0
 function mercXY(lat,lon,z){                  // geo -> world-pixel at integer zoom z
@@ -376,7 +377,14 @@ function mercXY(lat,lon,z){                  // geo -> world-pixel at integer zo
   return {x:(lon+180)/360*s, y:(0.5-Math.log((1+sy)/(1-sy))/(4*Math.PI))*s};
 }
 const tileCache=new Map();                   // "style/z/x/y" -> Image
-const tileURL=(style,z,x,y,hi)=>`https://${"abcd"[(x+y)&3]}.basemaps.cartocdn.com/${style}/${z}/${x}/${y}${hi?"@2x":""}.png`;
+// One host, not the old a./b./c./d. shards. Spreading tiles over four
+// subdomains was a way around HTTP/1.1's six-connections-per-host limit; over
+// HTTP/2, which this CDN speaks, every tile multiplexes on one connection and
+// the shards only add DNS lookups and TLS handshakes. It is also the exact URL
+// CARTO hands out with a key, so there is no question of whether the shards
+// honour one.
+const tileURL=(style,z,x,y,hi)=>`https://basemaps.cartocdn.com/${style}/${z}/${x}/${y}${hi?"@2x":""}.png`
+  +(MAP_KEY?`?key=${encodeURIComponent(MAP_KEY)}`:"");
 function getTile(style,z,x,y,hi){
   const k=style+"/"+z+"/"+x+"/"+y; let img=tileCache.get(k);
   if(img) return (img.complete&&img.naturalWidth>0)?img:null;
@@ -475,6 +483,19 @@ const REVOLUT_URL="https://revolut.me/vsanchezalonso";
 // Ambient music: a YouTube video embedded on demand (nothing loads until you tap
 // the speaker). Set MUSIC_ID="" to hide the button. MUSIC_START = start seconds.
 const MUSIC_ID="otSuo6QNYLg", MUSIC_START=0;
+// CARTO basemap key. CARTO began requiring one for its raster tiles in late
+// September 2026; without it every tile comes back stamped "API KEY REQUIRED"
+// and the underlay is unreadable. Only the underlay — the scope, the aircraft
+// and the feeds are unaffected, so an unkeyed copy still works, it just looks
+// broken. The key is free and needs no CARTO account: ask for one at
+// https://carto.com/basemaps/apikey (free tier is 5M tile requests a month for
+// non-commercial use). It is a public browser key by nature — it ships in this
+// file in plain sight, the way every web map key does — so leave it scoped to
+// basemaps and nothing else. ?mapkey=<key> overrides it for one browser and
+// remembers the override, which fixes a deployed copy without a redeploy;
+// ?mapkey= drops the override and goes back to the key below.
+let MAP_KEY="cb1_5820_1_ecc1fcc86bf940b08d886f50";
+const MAP_KEY_SHIPPED=MAP_KEY;   // what ?mapkey= reverts to
 // Build version, shown in DIAG. "dev" means an unstamped copy — opened straight
 // from a working tree. `python3 scripts/version.py` bakes `git describe` into a
 // static copy before you deploy it (GitHub Pages, a USB stick…); the bundled
@@ -1250,6 +1271,17 @@ try{state.lastGood=localStorage.getItem("scope.lastGood")||null;}catch(e){}
 const urlRelay=params.get("relay");
 if(urlRelay!=null) RELAYS=urlRelay
   ? [{name:"custom",wrap:u=>urlRelay+encodeURIComponent(u)}] : [];
+// ?mapkey=<key> stores a CARTO basemap key for this browser; ?mapkey= clears it.
+// Remembered so a keyless deploy can be fixed from the address bar once.
+try{ MAP_KEY=localStorage.getItem("scope.mapKey")||MAP_KEY; }catch(e){}
+const urlMapKey=params.get("mapkey");
+if(urlMapKey!=null){
+  const k=urlMapKey.trim();
+  MAP_KEY=k||MAP_KEY_SHIPPED;   // empty means "forget mine", not "use none"
+  try{ k?localStorage.setItem("scope.mapKey",k)
+        :localStorage.removeItem("scope.mapKey"); }catch(e){}
+  tileCache.clear();            // drop any watermarked tiles already fetched
+}
 const urlSkin=params.get("skin");                                 // ?skin=red to preset
 applyTheme(urlSkin&&urlSkin in THEMES?urlSkin:savedTheme);
 // auto-cycle: ?cycle=10 (seconds) wins, else the remembered setting
